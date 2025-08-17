@@ -101,15 +101,7 @@ StruktX is a Python framework for building AI applications with:
 
 ## Documentation
 
-📖 **Full Documentation**: [docs/README.md](docs/README.md)
-
-The documentation includes:
-- Component architecture overview
-- Configuration examples
-- Custom handler/classifier development
-- LangChain integration
-- Middleware examples
-- Best practices
+https://struktx.mintlify.app/
 
 ## Features
 
