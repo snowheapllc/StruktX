@@ -1,7 +1,7 @@
 <div align="center">
   <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/logo/logo.png" alt="StruktX Logo" width="120" height="120">
   <br>
-  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/logo/nobg-both.png" alt="StruktX" width="200">
+  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/nobg-both.png" alt="StruktX" width="200">
 </div>
 
 # StruktX
