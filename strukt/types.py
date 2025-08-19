@@ -3,6 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+class StruktQueryEnum:
+    GENERAL = "general"
+    MULTIPLE = "multiple"
+    QUERY = "query"
+    COMMAND = "command"
+    ACTION = "action"
+    INFORMATION = "information"
+    ERROR = "error"
+
 
 @dataclass
 class InvocationState:

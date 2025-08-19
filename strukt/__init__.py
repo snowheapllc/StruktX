@@ -1,7 +1,9 @@
 from .ai import create
-from .config import StruktConfig, LLMClientConfig, ClassifierConfig, MemoryConfig, HandlersConfig, ExtrasConfig, HumanLayerConfig
+from .config import StruktConfig, LLMClientConfig, ClassifierConfig, MemoryConfig, HandlersConfig, ExtrasConfig, HumanLayerConfig, MiddlewareConfig
 from .types import StruktResponse, InvocationState, HandlerResult, QueryClassification
 from .interfaces import LLMClient, Classifier, Handler, MemoryEngine
+from .langchain_helpers import LangChainLLMClient
+from .defaults import MemoryAugmentedLLMClient
 
 __all__ = [
     "create",
@@ -20,6 +22,9 @@ __all__ = [
     "Classifier",
     "Handler",
     "MemoryEngine",
+    "LangChainLLMClient",
+    "MemoryAugmentedLLMClient",
+    "MiddlewareConfig",
 ]
 
 

@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Dict, List
 
 from .interfaces import Classifier, Handler, MemoryEngine
-from .types import InvocationState, HandlerResult, QueryClassification
+from .types import InvocationState, HandlerResult, QueryClassification, StruktQueryEnum
 from .middleware import (
     Middleware,
     apply_before_classify,
@@ -49,7 +49,7 @@ class Engine:
         return state, classification
 
     def _maybe_fallback_handler(self) -> Handler | None:
-        return self._handlers.get(self._default_route or "general")
+        return self._handlers.get(self._default_route or StruktQueryEnum.GENERAL)
 
     def _should_fallback(self, state: InvocationState) -> bool:
         return not state.query_types or not state.parts

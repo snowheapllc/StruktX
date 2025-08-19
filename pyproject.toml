@@ -33,6 +33,10 @@ requires-python = ">=3.8.1"
 dependencies = [
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "pytz>=2024.1",
+    "pycountry>=23.12.11",
+    "rich>=14.1.0",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +50,8 @@ llm = [
 # Vector store support
 vector = [
     "upstash-vector>=0.1.0",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=2.7.0",
 ]
 
 # Development dependencies
@@ -72,6 +78,8 @@ all = [
     "langchain-core>=0.1.0",
     "langchain-community>=0.2.0",
     "upstash-vector>=0.1.0",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=2.7.0",
 ]
 
 [project.urls]
@@ -138,6 +146,8 @@ strict_equality = true
 module = [
     "langchain.*",
     "upstash_vector.*",
+    "chromadb.*",
+    "sentence_transformers.*",
 ]
 ignore_missing_imports = true
 

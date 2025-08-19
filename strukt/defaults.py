@@ -4,9 +4,9 @@ from typing import Any, List, Type
 
 from pydantic import BaseModel
 
-from .interfaces import LLMClient, Classifier, Handler
-from .types import InvocationState, QueryClassification, HandlerResult
-
+from .interfaces import LLMClient, Classifier, Handler, MemoryEngine
+from .types import InvocationState, QueryClassification, HandlerResult, StruktQueryEnum
+import os
 
 class SimpleLLMClient(LLMClient):
     """A minimal LLM client placeholder. Users should supply their own.
@@ -18,30 +18,149 @@ class SimpleLLMClient(LLMClient):
         return type("Resp", (), {"content": prompt})
 
     def structured(self, prompt: str, output_model: Type[BaseModel], **kwargs: Any) -> Any:
-        # Create a trivial instance with defaults if possible
+        # Try to return an empty-but-valid object for common fields to avoid raising
         try:
-            return output_model()
+            return output_model.model_validate({
+                "query_types": [],
+                "confidences": [],
+                "parts": [],
+            })
         except Exception:
-            # Try pydantic v2 then v1 fallback
+            # Best-effort pydantic v2 -> v1 fallback paths
             try:
-                return output_model.model_construct()  # type: ignore[attr-defined]
+                return output_model.model_construct(
+                    query_types=[], confidences=[], parts=[]
+                )  # type: ignore[attr-defined]
             except Exception:
-                return output_model.construct()  # type: ignore[attr-defined]
+                try:
+                    return output_model.construct(
+                        query_types=[], confidences=[], parts=[]
+                    )  # type: ignore[attr-defined]
+                except Exception:
+                    return output_model()  # may still raise if strict
+                
+class MemoryAugmentedLLMClient(LLMClient):
+    """Decorator that injects retrieved memory context into prompts."""
+
+    def __init__(self, base: LLMClient, memory: MemoryEngine, *, top_k: int = 5) -> None:
+        self._base = base
+        self._memory = memory
+        self._top_k = top_k
+
+    def _augment(self, prompt: str, *, context: dict | None = None, query_hint: str | None = None) -> str:
+        try:
+            # Prefer sync retrieval via new API; fallback to legacy method names if present
+            docs: List[str] = []
+            user_id = None
+            unit_id = None
+            if context:
+                try:
+                    user_id = str(context.get("user_id")) if context.get("user_id") is not None else None
+                    unit_id = str(context.get("unit_id")) if context.get("unit_id") is not None else None
+                except Exception:
+                    user_id = None
+                    unit_id = None
+            # Try using store for scope-aware listing if present
+            try:
+                store = getattr(self._memory, "store", None)
+            except Exception:
+                store = None
+            if store is not None and (user_id or unit_id):
+                try:
+                    docs = store.list_engine_memories_for_scope(user_id=user_id, unit_id=unit_id, limit=self._top_k)  # type: ignore[attr-defined]
+                except Exception:
+                    docs = []
+            if not docs:
+                retrieval_query = query_hint or prompt
+                if hasattr(self._memory, "get_scoped") and callable(getattr(self._memory, "get_scoped")):
+                    docs = getattr(self._memory, "get_scoped")(retrieval_query, user_id=user_id, unit_id=unit_id, top_k=self._top_k)  # type: ignore[call-arg]
+                elif hasattr(self._memory, "get") and callable(getattr(self._memory, "get")):
+                    docs = self._memory.get(retrieval_query, self._top_k)  # type: ignore[arg-type]
+                elif hasattr(self._memory, "retrieve") and callable(getattr(self._memory, "retrieve")):
+                    docs = getattr(self._memory, "retrieve")(retrieval_query, self._top_k)  # type: ignore[call-arg]
+        except Exception:
+            docs = []
+        if not docs:
+            return prompt
+        mem_block = "\n".join(f"- {d}" for d in docs)
+        # Debug print once per invocation using a flag on the provided context dict
+        try:
+            if os.getenv("STRUKTX_DEBUG") == "1":
+                should_print = True
+                if isinstance(context, dict):
+                    flags = context.setdefault("_struktx_debug", {})
+                    if flags.get("mem_injected_printed"):
+                        should_print = False
+                    else:
+                        flags["mem_injected_printed"] = True
+                if should_print:
+                    print(f"[StruktX] Injecting {len(docs)} memory item(s) into prompt")
+        except Exception:
+            pass
+        return f"Relevant memory:\n{mem_block}\n\n{prompt}"
+
+    def invoke(self, prompt: str, **kwargs: Any) -> Any:
+        ctx = kwargs.get("context") if isinstance(kwargs, dict) else None
+        qh = kwargs.get("query_hint") if isinstance(kwargs, dict) else None
+        augmented = self._augment(prompt, context=ctx, query_hint=qh)
+        # Remove augmentation-only kwargs before delegating
+        clean_kwargs = dict(kwargs)
+        if "context" in clean_kwargs:
+            clean_kwargs.pop("context", None)
+        if "query_hint" in clean_kwargs:
+            clean_kwargs.pop("query_hint", None)
+        return self._base.invoke(augmented, **clean_kwargs)
+
+    def structured(self, prompt: str, output_model: Any, **kwargs: Any) -> Any:
+        ctx = kwargs.get("context") if isinstance(kwargs, dict) else None
+        qh = kwargs.get("query_hint") if isinstance(kwargs, dict) else None
+        augmented = self._augment(prompt, context=ctx, query_hint=qh)
+        clean_kwargs = dict(kwargs)
+        if "context" in clean_kwargs:
+            clean_kwargs.pop("context", None)
+        if "query_hint" in clean_kwargs:
+            clean_kwargs.pop("query_hint", None)
+        return self._base.structured(augmented, output_model, **clean_kwargs)
 
 
 class SimpleClassifier(Classifier):
     def classify(self, state: InvocationState) -> QueryClassification:
         # Default: route everything to 'general'
-        return QueryClassification(query_types=["general"], confidences=[1.0], parts=[state.text])
+        return QueryClassification(query_types=[StruktQueryEnum.GENERAL], confidences=[1.0], parts=[state.text])
 
 
 class GeneralHandler(Handler):
-    def __init__(self, prompt_template: str | None = None) -> None:
-        self._prompt = prompt_template or "{text}"
+    """General handler that consults the configured LLM for a friendly reply.
+
+    If the app enabled memory augmentation, the LLM is already wrapped to include
+    relevant context. On failure, we return the user text as-is.
+    """
+
+    def __init__(self, llm: LLMClient, prompt_template: str | None = None) -> None:
+        self._llm = llm
+        self._prompt = prompt_template
 
     def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
-        text = parts[0] if parts else state.text
-        response = self._prompt.format(text=text, context=state.context)
-        return HandlerResult(response=str(response), status="GENERAL")
+        # Preserve the user's full question for general responses
+        text = state.text
+        try:
+            if self._prompt:
+                prompt = self._prompt.format(text=text, context=state.context)
+            else:
+                prompt = (
+                    "You are a helpful assistant. Provide a concise, friendly, and personalized answer.\n"
+                    "Incorporate any 'Relevant memory' context provided above to avoid asking for information we already know.\n"
+                    "Prefer to use known preferences (e.g., food, location) to answer directly.\n\n"
+                    f"User: {text}\n"
+                    "Assistant:"
+                )
+            resp = self._llm.invoke(prompt, context=state.context, query_hint=state.text)
+            content = getattr(resp, "content", None)
+            response = str(content) if content is not None else str(resp)
+            if not response:
+                response = text
+            return HandlerResult(response=response, status=StruktQueryEnum.GENERAL)
+        except Exception:
+            return HandlerResult(response=text, status=StruktQueryEnum.GENERAL)
 
 

@@ -27,18 +27,38 @@ class Handler(ABC):
 
 
 class MemoryEngine(ABC):
-    """Optional memory interface."""
+    """Memory interface for adding, retrieving, and removing items."""
 
     @abstractmethod
-    async def process_webhook(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def add(self, text: str, metadata: Dict[str, Any] | None = None) -> None:
         ...
 
     @abstractmethod
-    async def get_stats(self) -> Dict[str, Any]:
+    def get(self, query: str, top_k: int = 5) -> List[str]:
         ...
 
     @abstractmethod
-    async def cleanup(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_scoped(
+        self,
+        query: str,
+        *,
+        user_id: str | None = None,
+        unit_id: str | None = None,
+        top_k: int = 5,
+    ) -> List[str]:
+        """Retrieve using engine-level metadata filters if supported.
+
+        Implementations should fall back to unfiltered get() when filtering
+        is not supported or when all scope values are None.
+        """
+        ...
+
+    @abstractmethod
+    def remove(self, text: str) -> int:
+        ...
+
+    @abstractmethod
+    def cleanup(self, **kwargs: Any) -> Dict[str, Any]:
         ...
 
 
