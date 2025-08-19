@@ -93,7 +93,7 @@ app = create(StruktConfig(
 
 ## What is StruktX?
 
-StruktX is a Python framework for building AI applications with focus on natural language to actions or end-user responses:
+StruktX is a Python framework for building AI applications with focus on natural language -> actions
 
 - **🔄 Swappable Components**: LLM clients, classifiers, handlers, and memory engines
 - **📝 Type Safety**: Full type hints and Pydantic models
