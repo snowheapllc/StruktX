@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/logo/logo.png" alt="StruktX Logo" width="120" height="120">
+  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/docs/logo/logo.png" alt="StruktX Logo" width="120" height="120">
   <br>
-  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/nobg-both.png" alt="StruktX" width="200">
+  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/public/nobg-both.png" alt="StruktX" width="200">
 </div>
 
 # StruktX
@@ -48,12 +48,16 @@ pip install struktx[all]
 
 ### Source
 ```bash
+# Create virtual env
 uv venv
 
+# Activate environment
 source .venv/bin/activate
 
+# Sync and install pyproject dependencies
 uv sync
 
+# Install finall Strukt package
 uv pip install struktx[all]
 ```
 
@@ -63,7 +67,6 @@ from strukt import create, StruktConfig, HandlersConfig, LLMClientConfig, Classi
 from strukt.classifiers.llm_classifier import DefaultLLMClassifier, DEFAULT_CLASSIFIER_TEMPLATE
 from strukt.examples.time_handler import TimeHandler
 
-# Example with LangChain OpenAI integration
 from langchain_openai import ChatOpenAI
 from strukt.langchain_helpers import LangChainLLMClient
 
@@ -72,9 +75,9 @@ langchain_llm = ChatOpenAI(api_key="your-openai-api-key")
 llm_client = LangChainLLMClient(langchain_llm)
 
 app = create(StruktConfig(
-    llm=LLMClientConfig(factory=lambda **_: llm_client),
+    llm=LLMClientConfig(llm_client),
     classifier=ClassifierConfig(
-        factory=lambda llm, **_: DefaultLLMClassifier(
+        factory=DefaultLLMClassifier(
             llm=llm,
             prompt_template=DEFAULT_CLASSIFIER_TEMPLATE,
             allowed_types=["time_service", "weather", "general"],
@@ -82,7 +85,7 @@ app = create(StruktConfig(
         )
     ),
     handlers=HandlersConfig(
-        registry={"time_service": lambda llm, **_: TimeHandler(llm)},
+        registry={"time_service": TimeHandler(llm)},
         default_route="general",
     ),
 ))
@@ -98,10 +101,6 @@ StruktX is a Python framework for building AI applications with:
 - **🔌 Extensible**: Easy to add custom components
 - **🧠 Memory Support**: Optional conversation memory
 - **🔧 Middleware**: Pre/post processing hooks
-
-## Documentation
-
-https://struktx.mintlify.app/
 
 ## Features
 
@@ -128,6 +127,6 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) 
 
 ## Support
 
-- 📖 [Documentation](docs/README.md)
-- 🐛 [Issue Tracker](https://github.com/struktx/struktx/issues)
-- 💬 [Discussions](https://github.com/struktx/struktx/discussions)
+- 📖 [Documentation](https://struktx.mintlify.app/)
+- 🐛 [Issue Tracker](https://github.com/aymanhs-code/StruktX/issues)
+- 💬 [Discussions](https://github.com/aymanhs-code/StruktX/discussions)
