@@ -1,7 +1,7 @@
 <div align="center">
   <img src="/docs/public/logo-blue.png" alt="StruktX Logo" width="120" height="120">
   <br>
-  <img src="/docs/public/nobg-both.png" alt="StruktX" width="200">
+  <img src="/docs/public/nobg-both-white.png" alt="StruktX" width="200">
 </div>
 
 # StruktX
