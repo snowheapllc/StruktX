@@ -108,6 +108,19 @@ class StruktLogger:
         )
         self._console.print(panel)
 
+    def memory_injection(self, source: str, count: int) -> None:
+        """Log memory injection with source context."""
+        if not self._should("info"):
+            return
+        message = f"Injecting {count} memory item(s) into prompt"
+        panel = Panel(
+            self._maybe_truncate(message),
+            # Use angle brackets instead of square brackets to avoid Rich markup parsing
+            title=f"🧠 [bold magenta]{self._name}[/bold magenta] MEMORY <{source}>",
+            border_style="magenta",
+        )
+        self._console.print(panel)
+
     def warn(self, message: str) -> None:
         if not self._should("warn"):
             return

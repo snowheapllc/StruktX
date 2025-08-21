@@ -81,6 +81,7 @@ class DefaultLLMClassifier(Classifier):
                 ClassificationOut,
                 context=state.context,
                 query_hint=state.text,
+                augment_source="classifier",
             )
             qt = list(out.query_types or [])
             cf = list(out.confidences or [])

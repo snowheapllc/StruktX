@@ -6,3 +6,4 @@ roomi/
 test-examples/
 full_example.py
 .ruff_cache/
+things_to_document.md

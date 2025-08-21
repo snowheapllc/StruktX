@@ -212,6 +212,7 @@ class MemoryExtractionMiddleware(Middleware):
                 MemoryExtractionMiddleware.MemoryBatch,
                 context=state.context,
                 query_hint=state.text,
+                augment_source="middleware.memory_extraction",
             )
             items = list(getattr(out, "items", []) or [])
 

@@ -57,7 +57,12 @@ class MemoryAugmentedLLMClient(LLMClient):
         self._top_k = top_k
 
     def _augment(
-        self, prompt: str, *, context: dict | None = None, query_hint: str | None = None
+        self,
+        prompt: str,
+        *,
+        context: dict | None = None,
+        query_hint: str | None = None,
+        source: str | None = None,
     ) -> str:
         try:
             # Prefer sync retrieval via new API; fallback to legacy method names if present
@@ -117,12 +122,13 @@ class MemoryAugmentedLLMClient(LLMClient):
         if not docs:
             return prompt
         mem_block = "\n".join(f"- {d}" for d in docs)
-        # Log memory injection using our structured logger
+        # Log memory injection using our structured logger with source context
         try:
             from .logging import get_logger
 
             _log = get_logger("memory")
-            _log.info(f"Injecting {len(docs)} memory item(s) into prompt")
+            src = source or "unknown"
+            _log.memory_injection(src, len(docs))
         except Exception:
             pass
         return f"Relevant memory:\n{mem_block}\n\n{prompt}"
@@ -130,24 +136,38 @@ class MemoryAugmentedLLMClient(LLMClient):
     def invoke(self, prompt: str, **kwargs: Any) -> Any:
         ctx = kwargs.get("context") if isinstance(kwargs, dict) else None
         qh = kwargs.get("query_hint") if isinstance(kwargs, dict) else None
-        augmented = self._augment(prompt, context=ctx, query_hint=qh)
+        src = None
+        if isinstance(kwargs, dict):
+            src = kwargs.get("augment_source") or kwargs.get("caller")
+        augmented = self._augment(prompt, context=ctx, query_hint=qh, source=src)
         # Remove augmentation-only kwargs before delegating
         clean_kwargs = dict(kwargs)
         if "context" in clean_kwargs:
             clean_kwargs.pop("context", None)
         if "query_hint" in clean_kwargs:
             clean_kwargs.pop("query_hint", None)
+        if "augment_source" in clean_kwargs:
+            clean_kwargs.pop("augment_source", None)
+        if "caller" in clean_kwargs:
+            clean_kwargs.pop("caller", None)
         return self._base.invoke(augmented, **clean_kwargs)
 
     def structured(self, prompt: str, output_model: Any, **kwargs: Any) -> Any:
         ctx = kwargs.get("context") if isinstance(kwargs, dict) else None
         qh = kwargs.get("query_hint") if isinstance(kwargs, dict) else None
-        augmented = self._augment(prompt, context=ctx, query_hint=qh)
+        src = None
+        if isinstance(kwargs, dict):
+            src = kwargs.get("augment_source") or kwargs.get("caller")
+        augmented = self._augment(prompt, context=ctx, query_hint=qh, source=src)
         clean_kwargs = dict(kwargs)
         if "context" in clean_kwargs:
             clean_kwargs.pop("context", None)
         if "query_hint" in clean_kwargs:
             clean_kwargs.pop("query_hint", None)
+        if "augment_source" in clean_kwargs:
+            clean_kwargs.pop("augment_source", None)
+        if "caller" in clean_kwargs:
+            clean_kwargs.pop("caller", None)
         return self._base.structured(augmented, output_model, **clean_kwargs)
 
 

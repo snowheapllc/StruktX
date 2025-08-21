@@ -106,7 +106,7 @@ class DeviceControlHandler(Handler):
             self._log.prompt("Device Control - Final Prompt", log_prompt)
 
             structured: DeviceControlResponse = self._llm.structured(
-                prompt, DeviceControlResponse
+                prompt, DeviceControlResponse, augment_source="devices.handler"
             )
             self._log.json(
                 "Structured DeviceControlResponse",

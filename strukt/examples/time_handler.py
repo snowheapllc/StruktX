@@ -111,7 +111,10 @@ class TimeHandler(Handler):
         try:
             self._log.prompt("Time Probe Prompt", probe_prompt)
             probe_resp = self._llm.invoke(
-                probe_prompt, context=state.context, query_hint=text
+                probe_prompt,
+                context=state.context,
+                query_hint=text,
+                augment_source="time_handler.probe",
             )
             probe_line = str(getattr(probe_resp, "content", "")).strip() or str(
                 probe_resp
