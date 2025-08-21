@@ -131,7 +131,7 @@ Contributions are welcome! Please report any issues, bugs, improvements, or feat
 - 🐛 [Issue Tracker](https://github.com/snowheapllc/StruktX/issues)
 - 💬 [Discussions](https://github.com/snowheapllc/StruktX/discussions)
 
-<div align="center">
+<div align="right">
   <a href="https://github.com/snowheapllc">
     <img src="/docs/public/snowheap.png" alt="Snowheap LLC Logo" width="100">
   </a>
