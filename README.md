@@ -127,6 +127,6 @@ Contributions are welcome! Please report any issues, bugs, improvements, or feat
 
 ## Support
 
-- 📖 [Documentation](https://struktx.mintlify.app/)
-- 🐛 [Issue Tracker](https://github.com/aymanhs-code/StruktX/issues)
-- 💬 [Discussions](https://github.com/aymanhs-code/StruktX/discussions)
+- 📖 [Documentation](https://struktx.vercel.app/docs)
+- 🐛 [Issue Tracker](https://github.com/snowheapllc/StruktX/issues)
+- 💬 [Discussions](https://github.com/snowheapllc/StruktX/discussions)
