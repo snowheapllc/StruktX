@@ -103,3 +103,37 @@ def create_structured_chain(
     # If using our adapter, unwrap to underlying runnable for best LC integration
     underlying: Any = getattr(llm_client, "_chat_model", llm_client)
     return prompt | underlying | parser  # type: ignore[operator]
+
+
+def parse_models_list(models_str: str) -> list[str]:
+    """
+    Parse a string into a list of model names.
+    Accepts:
+      - Comma-separated: 'model1,model2,model3'
+      - JSON-style: '["model1", "model2", "model3"]'
+      - Loosely quoted: '"model1", \'model2\', "model3"'
+    Returns a clean list of model names with all extraneous quotes removed.
+    """
+    import json
+    import re
+
+    models_str = models_str.strip()
+    if not models_str:
+        return []
+
+    # Try JSON parsing first
+    try:
+        models = json.loads(models_str)
+        if isinstance(models, list):
+            return [str(m).strip().strip("'\"") for m in models]
+    except Exception:
+        pass
+
+    # Fallback: split by comma, strip whitespace and any surrounding quotes
+    # Handles: 'model1', "model2", 'model3'
+    models = [
+        m.strip().strip("'\"")
+        for m in re.split(r",(?![^[]*\])", models_str)
+        if m.strip().strip("'\"")
+    ]
+    return [m for m in models if m]

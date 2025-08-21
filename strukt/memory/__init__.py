@@ -6,6 +6,7 @@ from .memory_types import (
     KnowledgeStats,
 )
 from .memory import build_node, build_edge, batch_add_nodes, UpstashVectorMemoryEngine
+from .middleware import MemoryExtractionMiddleware
 
 __all__ = [
     "KnowledgeStore",
@@ -17,4 +18,5 @@ __all__ = [
     "build_edge",
     "batch_add_nodes",
     "UpstashVectorMemoryEngine",
+    "MemoryExtractionMiddleware",
 ]
