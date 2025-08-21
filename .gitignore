@@ -5,3 +5,4 @@ __pycache__
 roomi/
 test-examples/
 full_example.py
+.ruff_cache/
