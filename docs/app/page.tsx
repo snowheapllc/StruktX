@@ -219,7 +219,7 @@ export default function Home() {
               <div className="w-45 h-12 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 dark:border-white/10 animate-pulse shadow-lg"></div>
             }>
               <GlassSurface width={180} height={50} borderRadius={25} backgroundOpacity={0.08} saturation={1} blur={8} brightness={60} opacity={0.8}>
-                <a href="https://github.com/aymanhs-code/StruktX" target="_blank" rel="noopener noreferrer" className="h-full w-full flex items-center justify-center text-white/90 font-medium">
+                <a href="https://github.com/snowheapllc/StruktX" target="_blank" rel="noopener noreferrer" className="h-full w-full flex items-center justify-center text-white/90 font-medium">
                   <Github className="mr-2 h-5 w-5" />
                   View on GitHub
                 </a>
@@ -340,7 +340,7 @@ export default function Home() {
                       </Button>
                     </a>
                     <a
-                      href="https://github.com/aymanHS-code/StruktX"
+                      href="https://github.com/snowheapllc/StruktX"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
