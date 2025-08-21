@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/docs/logo/logo.png" alt="StruktX Logo" width="120" height="120">
+  <img src="/docs/public/logo-blue.png" alt="StruktX Logo" width="120" height="120">
   <br>
-  <img src="https://github.com/aymanHS-code/struktx-docs/blob/main/public/nobg-both.png" alt="StruktX" width="200">
+  <img src="/docs/public/nobg-both.png" alt="StruktX" width="200">
 </div>
 
 # StruktX
@@ -130,3 +130,9 @@ Contributions are welcome! Please report any issues, bugs, improvements, or feat
 - 📖 [Documentation](https://struktx.vercel.app/docs)
 - 🐛 [Issue Tracker](https://github.com/snowheapllc/StruktX/issues)
 - 💬 [Discussions](https://github.com/snowheapllc/StruktX/discussions)
+
+<div align="center">
+  <a href="https://github.com/snowheapllc">
+    <img src="/docs/public/snowheap.png" alt="Snowheap LLC Logo" width="100">
+  </a>
+</div>
