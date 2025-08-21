@@ -2,14 +2,17 @@
   <img src="/docs/public/logo-blue.png" alt="StruktX Logo" width="120" height="120">
   <br>
   <img src="/docs/public/nobg-both-white.png" alt="StruktX" width="200">
+  
+  A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory for NLP to Action flows
+  
+  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 </div>
 
-# StruktX
 
-A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory for NLP to Action flows
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
 
 ## Quick Install
 
