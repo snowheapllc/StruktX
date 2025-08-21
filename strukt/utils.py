@@ -4,7 +4,9 @@ import importlib
 from typing import Any, Callable, Union
 
 
-def load_factory(factory: Union[str, Callable[..., Any], None]) -> Callable[..., Any] | None:
+def load_factory(
+    factory: Union[str, Callable[..., Any], None],
+) -> Callable[..., Any] | None:
     if factory is None:
         return None
     if callable(factory):
@@ -12,7 +14,9 @@ def load_factory(factory: Union[str, Callable[..., Any], None]) -> Callable[...,
     if isinstance(factory, str):
         module_path, _, attr = factory.partition(":")
         if not module_path or not attr:
-            raise ValueError(f"Invalid import string factory '{factory}', expected 'module:attr'")
+            raise ValueError(
+                f"Invalid import string factory '{factory}', expected 'module:attr'"
+            )
         module = importlib.import_module(module_path)
         obj = getattr(module, attr)
         if not callable(obj):
@@ -57,6 +61,6 @@ def coerce_factory(factory_like: Any) -> Callable[..., Any] | None:
         instance = factory_like
         return lambda **kwargs: instance
 
-    raise TypeError("Unsupported factory type; expected callable, import string, class, or instance")
-
-
+    raise TypeError(
+        "Unsupported factory type; expected callable, import string, class, or instance"
+    )

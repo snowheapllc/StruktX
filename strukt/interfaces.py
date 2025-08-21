@@ -14,28 +14,24 @@ class LLMClient(Protocol):
 
 class Classifier(ABC):
     @abstractmethod
-    def classify(self, state: InvocationState) -> QueryClassification:
-        ...
+    def classify(self, state: InvocationState) -> QueryClassification: ...
 
 
 class Handler(ABC):
     """A handler that receives the invocation state and the parts for its type."""
 
     @abstractmethod
-    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
-        ...
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult: ...
 
 
 class MemoryEngine(ABC):
     """Memory interface for adding, retrieving, and removing items."""
 
     @abstractmethod
-    def add(self, text: str, metadata: Dict[str, Any] | None = None) -> None:
-        ...
+    def add(self, text: str, metadata: Dict[str, Any] | None = None) -> None: ...
 
     @abstractmethod
-    def get(self, query: str, top_k: int = 5) -> List[str]:
-        ...
+    def get(self, query: str, top_k: int = 5) -> List[str]: ...
 
     @abstractmethod
     def get_scoped(
@@ -54,12 +50,7 @@ class MemoryEngine(ABC):
         ...
 
     @abstractmethod
-    def remove(self, text: str) -> int:
-        ...
+    def remove(self, text: str) -> int: ...
 
     @abstractmethod
-    def cleanup(self, **kwargs: Any) -> Dict[str, Any]:
-        ...
-
-
-
+    def cleanup(self, **kwargs: Any) -> Dict[str, Any]: ...

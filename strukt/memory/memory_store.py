@@ -21,12 +21,20 @@ class KnowledgeStore:
         self._edges: List[KnowledgeEdge] = []
 
     # ---- Node operations ----
-    def add_node(self, node: KnowledgeNode, *, sync: bool = True, context: Optional[str] = None) -> None:
+    def add_node(
+        self, node: KnowledgeNode, *, sync: bool = True, context: Optional[str] = None
+    ) -> None:
         self._nodes_by_id[node.id] = node
         if sync and self._engine is not None:
             batch_add_nodes(self._engine, [node], context=context)
 
-    def add_nodes(self, nodes: List[KnowledgeNode], *, sync: bool = True, context: Optional[str] = None) -> int:
+    def add_nodes(
+        self,
+        nodes: List[KnowledgeNode],
+        *,
+        sync: bool = True,
+        context: Optional[str] = None,
+    ) -> int:
         for n in nodes:
             self._nodes_by_id[n.id] = n
         if sync and self._engine is not None:
@@ -36,7 +44,12 @@ class KnowledgeStore:
     def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
         return self._nodes_by_id.get(node_id)
 
-    def find_nodes(self, *, category: Optional[KnowledgeCategory | str] = None, key: Optional[str] = None) -> List[KnowledgeNode]:
+    def find_nodes(
+        self,
+        *,
+        category: Optional[KnowledgeCategory | str] = None,
+        key: Optional[str] = None,
+    ) -> List[KnowledgeNode]:
         out: List[KnowledgeNode] = []
         for n in self._nodes_by_id.values():
             if category and (n.category.value != str(category)):
@@ -47,20 +60,34 @@ class KnowledgeStore:
         return out
 
     # ---- Edge operations ----
-    def add_edge(self, edge: KnowledgeEdge, *, sync: bool = True, context: Optional[str] = None) -> None:
+    def add_edge(
+        self, edge: KnowledgeEdge, *, sync: bool = True, context: Optional[str] = None
+    ) -> None:
         self._edges.append(edge)
         if sync and self._engine is not None:
             # Provide node summaries to improve edge embedding
-            batch_add_edges(self._engine, [edge], nodes_by_id=self._nodes_by_id, context=context)
+            batch_add_edges(
+                self._engine, [edge], nodes_by_id=self._nodes_by_id, context=context
+            )
 
-    def add_edges(self, edges: List[KnowledgeEdge], *, sync: bool = True, context: Optional[str] = None) -> int:
+    def add_edges(
+        self,
+        edges: List[KnowledgeEdge],
+        *,
+        sync: bool = True,
+        context: Optional[str] = None,
+    ) -> int:
         self._edges.extend(edges)
         if sync and self._engine is not None:
-            return batch_add_edges(self._engine, edges, nodes_by_id=self._nodes_by_id, context=context)
+            return batch_add_edges(
+                self._engine, edges, nodes_by_id=self._nodes_by_id, context=context
+            )
         return len(edges)
 
     def neighbors(self, node_id: str) -> List[KnowledgeNode]:
-        neigh_ids = {e.target_node_id for e in self._edges if e.source_node_id == node_id}
+        neigh_ids = {
+            e.target_node_id for e in self._edges if e.source_node_id == node_id
+        }
         return [self._nodes_by_id[i] for i in neigh_ids if i in self._nodes_by_id]
 
     # ---- Sync helpers ----
@@ -109,7 +136,7 @@ class KnowledgeStore:
                     filter=filter_expr,
                 )
                 out: List[str] = []
-                for item in (res or []):
+                for item in res or []:
                     md = getattr(item, "metadata", None) or {}
                     cat = md.get("category", "other")
                     key = md.get("key", "note")
@@ -121,7 +148,10 @@ class KnowledgeStore:
             pass
         # Fallback: semantic query with composite context
         try:
-            composite = " ".join([p for p in [user_id or "", unit_id or ""] if p]).strip() or "memories"
+            composite = (
+                " ".join([p for p in [user_id or "", unit_id or ""] if p]).strip()
+                or "memories"
+            )
             return self._engine.get(composite, limit)
         except Exception:
             return []
@@ -173,5 +203,3 @@ class KnowledgeStore:
         )
         self.add_edge(edge, sync=sync, context=context)
         return edge
-
-

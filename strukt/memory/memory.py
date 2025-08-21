@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple, Optional
-import re
-import os
-import uuid
+from typing import Any, Dict, List, Optional
 
-from ..interfaces import MemoryEngine, LLMClient
-from .memory_types import KnowledgeNode, KnowledgeCategory, KnowledgeEdge, KnowledgeStats
-
-
+from ..interfaces import MemoryEngine
+from .memory_types import KnowledgeNode, KnowledgeCategory, KnowledgeEdge
 
 
 class UpstashVectorMemoryEngine(MemoryEngine):
@@ -46,6 +41,7 @@ class UpstashVectorMemoryEngine(MemoryEngine):
         try:
             import os
             from upstash_vector import Index  # type: ignore
+
             url = index_url or os.getenv("UPSTASH_VECTOR_REST_URL")
             token = index_token or os.getenv("UPSTASH_VECTOR_REST_TOKEN")
             if not url or not token:
@@ -56,7 +52,9 @@ class UpstashVectorMemoryEngine(MemoryEngine):
             self._configured = False
             self._index = None  # type: ignore[assignment]
 
-    def _build_metadata(self, node: KnowledgeNode, context: str | None, metadata: Dict[str, Any] | None) -> Dict[str, Any]:
+    def _build_metadata(
+        self, node: KnowledgeNode, context: str | None, metadata: Dict[str, Any] | None
+    ) -> Dict[str, Any]:
         m = {
             "node_id": node.id,
             "category": node.category.value,
@@ -81,7 +79,7 @@ class UpstashVectorMemoryEngine(MemoryEngine):
             parts.append(f"namespace = '{self._namespace}'")
         for k, v in (self._metadata_filter or {}).items():
             # Only simple equality filters are supported here
-            vs = str(v).replace("'", "\'")
+            vs = str(v).replace("'", "'")
             parts.append(f"{k} = '{vs}'")
         return " AND ".join(parts) if parts else None
 
@@ -95,13 +93,21 @@ class UpstashVectorMemoryEngine(MemoryEngine):
             user_id=md.get("user_id", self._default_user_id),
             unit_id=md.get("unit_id", self._default_unit_id),
             confidence=float(md.get("confidence", 1.0)),
-            metadata={md.get("meta_key", ""): md.get("meta_val", "")} if metadata else {},
+            metadata={md.get("meta_key", ""): md.get("meta_val", "")}
+            if metadata
+            else {},
             source_id=md.get("source_id"),
         )
 
-    def _vector_from_node(self, node: KnowledgeNode, context: Optional[str], metadata: Dict[str, Any] | None) -> Dict[str, Any]:
+    def _vector_from_node(
+        self,
+        node: KnowledgeNode,
+        context: Optional[str],
+        metadata: Dict[str, Any] | None,
+    ) -> Dict[str, Any]:
         return {
-            "id": (metadata or {}).get("id") or f"{node.user_id or 'anon'}:{node.unit_id or 'default'}:{node.id}",
+            "id": (metadata or {}).get("id")
+            or f"{node.user_id or 'anon'}:{node.unit_id or 'default'}:{node.id}",
             "data": f"Category: {node.category.value} | Key: {node.key} | Value: {node.value} | Context: {context or ''}",
             "metadata": self._build_metadata(node, context, metadata),
         }
@@ -115,7 +121,9 @@ class UpstashVectorMemoryEngine(MemoryEngine):
 
     def _query_ids_by_text(self, text: str, top_k: int = 20) -> List[str]:
         filter_expr = self._build_filter()
-        res = self._index.query(data=text, top_k=top_k, include_metadata=True, filter=filter_expr)
+        res = self._index.query(
+            data=text, top_k=top_k, include_metadata=True, filter=filter_expr
+        )
         ids = [getattr(item, "id", None) for item in (res or [])]
         return [i for i in ids if i]
 
@@ -137,7 +145,9 @@ class UpstashVectorMemoryEngine(MemoryEngine):
             return []
         try:
             filter_expr = self._build_filter()
-            res = self._index.query(data=query, top_k=top_k, include_metadata=True, filter=filter_expr)
+            res = self._index.query(
+                data=query, top_k=top_k, include_metadata=True, filter=filter_expr
+            )
             return [self._format_hit(item) for item in (res or [])]
         except Exception:
             return []
@@ -163,7 +173,9 @@ class UpstashVectorMemoryEngine(MemoryEngine):
             if unit_id:
                 filters.append(f"unit_id = '{str(unit_id)}'")
             filter_expr = " AND ".join(filters) if filters else None
-            res = self._index.query(data=query, top_k=top_k, include_metadata=True, filter=filter_expr)
+            res = self._index.query(
+                data=query, top_k=top_k, include_metadata=True, filter=filter_expr
+            )
             return [self._format_hit(item) for item in (res or [])]
         except Exception:
             # Fallback to unscoped
@@ -184,11 +196,14 @@ class UpstashVectorMemoryEngine(MemoryEngine):
 
     def cleanup(self, **kwargs: Any) -> Dict[str, Any]:
         # Best-effort: no server-side TTL; return an informative payload
-        return {"ok": self._configured, "reason": "Upstash Vector does not support generic TTL deletes via REST; implement app-specific policy using metadata filters."}
-
+        return {
+            "ok": self._configured,
+            "reason": "Upstash Vector does not support generic TTL deletes via REST; implement app-specific policy using metadata filters.",
+        }
 
 
 # --------------------- Helper builders and batch operations ---------------------
+
 
 def build_node(
     *,
@@ -202,7 +217,11 @@ def build_node(
     metadata: Optional[Dict[str, Any]] = None,
     source_id: Optional[str] = None,
 ) -> KnowledgeNode:
-    cat = category if isinstance(category, KnowledgeCategory) else KnowledgeCategory(str(category))
+    cat = (
+        category
+        if isinstance(category, KnowledgeCategory)
+        else KnowledgeCategory(str(category))
+    )
     node = KnowledgeNode(
         category=cat,
         key=key,
@@ -284,11 +303,16 @@ def batch_add_edges(
     - Each edge is stored as a separate vector with type='edge'
     - Uses source/target summaries (if nodes provided) to improve embedding quality
     """
+
     def _summaries(e: KnowledgeEdge) -> tuple[str, str]:
         src = nodes_by_id.get(e.source_node_id) if nodes_by_id else None
         tgt = nodes_by_id.get(e.target_node_id) if nodes_by_id else None
-        src_summary = f"{src.category.value}:{src.key}={src.value}" if src else e.source_node_id
-        tgt_summary = f"{tgt.category.value}:{tgt.key}={tgt.value}" if tgt else e.target_node_id
+        src_summary = (
+            f"{src.category.value}:{src.key}={src.value}" if src else e.source_node_id
+        )
+        tgt_summary = (
+            f"{tgt.category.value}:{tgt.key}={tgt.value}" if tgt else e.target_node_id
+        )
         return src_summary, tgt_summary
 
     def _serialize(e: KnowledgeEdge) -> tuple[str, Dict[str, Any]]:
@@ -333,6 +357,7 @@ def get_edges_for_node(
     Prefers metadata-filtered index queries when available; otherwise falls back
     to semantic search using node id (and relationship if provided).
     """
+
     def _edge_item_to_text(item: Any) -> Optional[str]:
         md = getattr(item, "metadata", None) or {}
         if md.get("type") != "edge":
@@ -345,15 +370,23 @@ def get_edges_for_node(
         return f"{src} -[{rel}]-> {tgt}"
 
     def _query_index(index: Any, filter_expr: str) -> List[str]:
-        res = index.query(data=node_id, top_k=top_k, include_metadata=True, filter=filter_expr)
-        return [txt for txt in (_edge_item_to_text(item) for item in (res or [])) if txt]
+        res = index.query(
+            data=node_id, top_k=top_k, include_metadata=True, filter=filter_expr
+        )
+        return [
+            txt for txt in (_edge_item_to_text(item) for item in (res or [])) if txt
+        ]
 
     # Fast path: UpstashVectorMemoryEngine exposes `_index` and optional `_namespace`
     index = getattr(engine, "_index", None)
     if index is not None:
         try:
             ns = getattr(engine, "_namespace", None)
-            base = f"type = 'edge' AND namespace = '{ns}'" if ns is not None else "type = 'edge'"
+            base = (
+                f"type = 'edge' AND namespace = '{ns}'"
+                if ns is not None
+                else "type = 'edge'"
+            )
             filters = [
                 base + f" AND source_node_id = '{node_id}'",
                 base + f" AND target_node_id = '{node_id}'",

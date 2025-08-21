@@ -37,6 +37,9 @@ dependencies = [
     "pytz>=2024.1",
     "pycountry>=23.12.11",
     "rich>=14.1.0",
+    "httpx>=0.28.1",
+    "boto3>=1.37.38",
+    "botocore>=1.37.38",
 ]
 
 [project.optional-dependencies]

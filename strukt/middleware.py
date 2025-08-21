@@ -39,7 +39,9 @@ class Middleware(ABC):
         return result
 
 
-def apply_before_classify(middleware: List[Middleware], state: InvocationState) -> InvocationState:
+def apply_before_classify(
+    middleware: List[Middleware], state: InvocationState
+) -> InvocationState:
     for m in middleware:
         state = m.before_classify(state)
     return state
@@ -56,7 +58,10 @@ def apply_after_classify(
 
 
 def apply_before_handle(
-    middleware: List[Middleware], state: InvocationState, query_type: str, parts: List[str]
+    middleware: List[Middleware],
+    state: InvocationState,
+    query_type: str,
+    parts: List[str],
 ) -> Tuple[InvocationState, List[str]]:
     for m in middleware:
         state, parts = m.before_handle(state, query_type, parts)
@@ -64,11 +69,11 @@ def apply_before_handle(
 
 
 def apply_after_handle(
-    middleware: List[Middleware], state: InvocationState, query_type: str, result: HandlerResult
+    middleware: List[Middleware],
+    state: InvocationState,
+    query_type: str,
+    result: HandlerResult,
 ) -> HandlerResult:
     for m in middleware:
         result = m.after_handle(state, query_type, result)
     return result
-
-
-

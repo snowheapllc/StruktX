@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
 
 class StruktQueryEnum:
     GENERAL = "general"
@@ -48,6 +49,3 @@ class StruktResponse:
     query_types: List[str]
     parts: List[str]
     metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-

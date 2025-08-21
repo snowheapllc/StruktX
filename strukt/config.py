@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from .types import StruktQueryEnum
-
 
 # Factories may be callables or import strings; resolved at create().
 Factory = Union[str, Callable[..., Any]]
@@ -33,8 +31,12 @@ class MemoryConfig:
 
 @dataclass
 class HandlersConfig:
-    registry: Dict[str, Factory] = field(default_factory=dict)  # query_type -> handler factory/callable/import
-    handler_params: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # query_type -> params for factory
+    registry: Dict[str, Factory] = field(
+        default_factory=dict
+    )  # query_type -> handler factory/callable/import
+    handler_params: Dict[str, Dict[str, Any]] = field(
+        default_factory=dict
+    )  # query_type -> params for factory
     default_route: Optional[str] = None  # fallback type name
 
 
@@ -63,7 +65,6 @@ class StruktConfig:
     handlers: HandlersConfig = field(default_factory=HandlersConfig)
     extras: ExtrasConfig = field(default_factory=ExtrasConfig)
     middleware: List[MiddlewareConfig] = field(default_factory=list)
-
 
 
 # Helper functions to coerce user-friendly dict inputs into dataclasses
@@ -145,4 +146,3 @@ def _coerce_middleware_list(value: Any) -> List[MiddlewareConfig]:
             # callable or import string
             items.append(MiddlewareConfig(factory=item, params={}))
     return items
-

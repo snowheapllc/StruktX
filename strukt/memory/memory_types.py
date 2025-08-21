@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -9,6 +9,7 @@ import uuid
 
 class KnowledgeCategory(str, Enum):
     """Generic categories for knowledge nodes (extend as needed)."""
+
     LOCATION = "location"
     PREFERENCE = "preference"
     BEHAVIOR = "behavior"
@@ -22,6 +23,7 @@ class KnowledgeCategory(str, Enum):
 
 class KnowledgeNode(BaseModel):
     """A generic knowledge node suitable for vector storage."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     category: KnowledgeCategory = Field(default=KnowledgeCategory.OTHER)
     key: str = Field(default="note")
@@ -36,6 +38,7 @@ class KnowledgeNode(BaseModel):
 
 class KnowledgeEdge(BaseModel):
     """A relationship between two knowledge nodes."""
+
     source_node_id: str
     target_node_id: str
     relationship: str = Field(default="related_to")
@@ -47,5 +50,3 @@ class KnowledgeStats(BaseModel):
     total_nodes: int = 0
     namespace: Optional[str] = None
     raw_index_info: Dict[str, Any] = Field(default_factory=dict)
-
-

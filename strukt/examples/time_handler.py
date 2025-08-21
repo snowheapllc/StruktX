@@ -8,19 +8,27 @@ from rich.panel import Panel
 
 from ..interfaces import Handler, LLMClient
 from ..types import InvocationState, HandlerResult
+from ..logging import get_logger
 
 
 class TimeHandler(Handler):
-    def __init__(self, llm: LLMClient, store: object | None = None, prompt_template: str | None = None):
+    def __init__(
+        self,
+        llm: LLMClient,
+        store: object | None = None,
+        prompt_template: str | None = None,
+    ):
         # llm is accepted for signature compatibility; not used in this simplified handler
         self._prompt = None
         self._store = store
         self.console = Console()
         self._llm = llm
+        self._log = get_logger("examples.time")
 
     def _extract_iana_timezone(self, text: str) -> Optional[str]:
         # Look for explicit IANA timezone like Region/City
         import re
+
         match = re.search(r"\b[A-Za-z]+/[A-Za-z_]+\b", text)
         if match:
             return match.group(0)
@@ -86,7 +94,9 @@ class TimeHandler(Handler):
         injected_docs: List[str] = []
         try:
             if self._store and hasattr(self._store, "list_engine_memories_for_scope"):
-                injected_docs = self._store.list_engine_memories_for_scope(user_id=user_id, unit_id=unit_id, limit=5)  # type: ignore[attr-defined]
+                injected_docs = self._store.list_engine_memories_for_scope(
+                    user_id=user_id, unit_id=unit_id, limit=5
+                )  # type: ignore[attr-defined]
         except Exception:
             injected_docs = []
         injected_list = [f"- {d}" for d in injected_docs]
@@ -99,14 +109,20 @@ class TimeHandler(Handler):
             "If not enough information, return exactly: MEM_PROBE: none."
         )
         try:
-            probe_resp = self._llm.invoke(probe_prompt, context=state.context, query_hint=text)
-            probe_line = str(getattr(probe_resp, "content", "")).strip() or str(probe_resp)
+            self._log.prompt("Time Probe Prompt", probe_prompt)
+            probe_resp = self._llm.invoke(
+                probe_prompt, context=state.context, query_hint=text
+            )
+            probe_line = str(getattr(probe_resp, "content", "")).strip() or str(
+                probe_resp
+            )
         except Exception:
             probe_line = "MEM_PROBE: none"
 
         # Fallback: if LLM returned none or unexpected, derive from injected docs
         try:
             import re as _re
+
             m = _re.match(r"^\s*MEM_PROBE:\s*(.+?)\s*$", probe_line)
             inferred = (m.group(1) if m else "").strip().lower()
             if not inferred or inferred == "none":
@@ -129,16 +145,25 @@ class TimeHandler(Handler):
             if self._store and hasattr(self._store, "find_nodes"):
                 user_id = str(state.context.get("user_id", ""))
                 unit_id = str(state.context.get("unit_id", ""))
-                pref_nodes = self._store.find_nodes(category="preference", key="timezone")  # type: ignore[attr-defined]
+                pref_nodes = self._store.find_nodes(
+                    category="preference", key="timezone"
+                )  # type: ignore[attr-defined]
+
                 # Prefer exact user+unit match, then user-only, then any
                 def _pick(nodes):
                     for n in nodes:
-                        if user_id and unit_id and n.user_id == user_id and n.unit_id == unit_id:
+                        if (
+                            user_id
+                            and unit_id
+                            and n.user_id == user_id
+                            and n.unit_id == unit_id
+                        ):
                             return n.value
                     for n in nodes:
                         if user_id and n.user_id == user_id:
                             return n.value
                     return nodes[0].value if nodes else ""
+
                 tz_name = str(_pick(pref_nodes) or "")
         except Exception:
             tz_name = ""
@@ -162,15 +187,22 @@ class TimeHandler(Handler):
                 user_id = str(state.context.get("user_id", ""))
                 unit_id = str(state.context.get("unit_id", ""))
                 loc_nodes = self._store.find_nodes(category="location")  # type: ignore[attr-defined]
+
                 # Prefer unit-specific, then user-specific, then any
                 def _pick_loc(nodes):
                     for n in nodes:
-                        if user_id and unit_id and str(n.user_id) == user_id and str(n.unit_id) == unit_id:
+                        if (
+                            user_id
+                            and unit_id
+                            and str(n.user_id) == user_id
+                            and str(n.unit_id) == unit_id
+                        ):
                             return n.value
                     for n in nodes:
                         if user_id and str(n.user_id) == user_id:
                             return n.value
                     return nodes[0].value if nodes else ""
+
                 loc = str(_pick_loc(loc_nodes) or "").strip()
                 if loc:
                     tz_name = self._city_to_tz(loc) or ""
@@ -193,6 +225,7 @@ class TimeHandler(Handler):
         if not tz_name and code:
             try:
                 from pytz import country_timezones  # type: ignore
+
                 tz_list = country_timezones.get(code, [])  # type: ignore[attr-defined]
                 if tz_list:
                     tz_name = tz_list[0]
@@ -202,9 +235,11 @@ class TimeHandler(Handler):
 
         try:
             import pytz  # type: ignore
+
             tz = pytz.timezone(tz_name)
             local_dt = datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S %Z")
             message = f"{local_dt} in {tz_name} | {probe_line}"
+            self._log.info(f"Resolved time for tz={tz_name} -> {local_dt}")
 
             # Pretty print the time result
             panel = Panel(
@@ -213,28 +248,39 @@ class TimeHandler(Handler):
                 f"[green]Local Time:[/green] {local_dt} ({tz_name})\n"
                 f"[magenta]{probe_line}[/magenta]\n"
                 f"[blue]Injected Docs:[/blue] {len(injected_docs)}\n"
-                + ("\n".join(f"[dim]- {d}[/dim]" for d in injected_docs) if injected_docs else ""),
+                + (
+                    "\n".join(f"[dim]- {d}[/dim]" for d in injected_docs)
+                    if injected_docs
+                    else ""
+                ),
                 title="🕐 [bold green]Time Service Result[/bold green]",
-                border_style="green"
+                border_style="green",
             )
             self.console.print(panel)
 
             return HandlerResult(response=message, status="time_service")
         except Exception:
             # Fallback: UTC time only
-            utc_dt = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            utc_dt = datetime.datetime.now(datetime.UTC).strftime(
+                "%Y-%m-%d %H:%M:%S UTC"
+            )
+            self._log.warn("Failed to resolve timezone; falling back to UTC")
 
             panel = Panel(
                 f"[red]Failed to resolve timezone for:[/red] {text}\n"
                 f"[yellow]Fallback to UTC:[/yellow] {utc_dt}\n"
                 f"[magenta]{probe_line}[/magenta]\n"
                 f"[blue]Injected Docs:[/blue] {len(injected_docs)}\n"
-                + ("\n".join(f"[dim]- {d}[/dim]" for d in injected_docs) if injected_docs else ""),
+                + (
+                    "\n".join(f"[dim]- {d}[/dim]" for d in injected_docs)
+                    if injected_docs
+                    else ""
+                ),
                 title="⚠️ [bold red]Timezone Resolution Failed[/bold red]",
-                border_style="red"
+                border_style="red",
             )
             self.console.print(panel)
 
-            return HandlerResult(response=f"{utc_dt} (UTC) | {probe_line}", status="time_service")
-
-
+            return HandlerResult(
+                response=f"{utc_dt} (UTC) | {probe_line}", status="time_service"
+            )

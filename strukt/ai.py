@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict
 import asyncio
 import os
 
@@ -11,7 +11,12 @@ from .engine import Engine
 from .utils import load_factory, coerce_factory
 from .langchain_helpers import adapt_to_llm_client
 from .middleware import Middleware
-from .defaults import SimpleClassifier, GeneralHandler, SimpleLLMClient, MemoryAugmentedLLMClient
+from .defaults import (
+    SimpleClassifier,
+    GeneralHandler,
+    SimpleLLMClient,
+    MemoryAugmentedLLMClient,
+)
 from .memory import KnowledgeStore
 
 
@@ -24,7 +29,9 @@ class Strukt:
         results = self._engine.run(state)
         responses = [r.response for r in results if r and r.response]
         query_types = [r.status for r in results if r and r.status]
-        combined = ". ".join([s.strip().rstrip(". ") for s in responses]) if responses else ""
+        combined = (
+            ". ".join([s.strip().rstrip(". ") for s in responses]) if responses else ""
+        )
         if len(query_types) > 1:
             query_type = StruktQueryEnum.MULTIPLE
         elif query_types:
@@ -36,7 +43,7 @@ class Strukt:
             query_type=query_type,
             query_types=query_types,
             parts=list(state.parts or []),
-            metadata={}
+            metadata={},
         )
 
     async def ainvoke(self, text: str, context: Dict | None = None) -> StruktResponse:
@@ -77,6 +84,7 @@ def _build_llm(cfg: StruktConfig) -> LLMClient:
         if api_key:
             try:
                 from langchain_openai import ChatOpenAI
+
                 candidate = ChatOpenAI(api_key=api_key)
                 adapted = adapt_to_llm_client(candidate)
                 return adapted
@@ -116,7 +124,9 @@ def _build_memory(cfg: StruktConfig, llm: LLMClient) -> MemoryEngine | None:
             return factory(**params)  # type: ignore[misc]
 
 
-def _build_handlers(cfg: StruktConfig, llm: LLMClient, memory: MemoryEngine | None) -> Dict[str, Handler]:
+def _build_handlers(
+    cfg: StruktConfig, llm: LLMClient, memory: MemoryEngine | None
+) -> Dict[str, Handler]:
     handlers: Dict[str, Handler] = {}
     for qtype, factory_like in (cfg.handlers.registry or {}).items():
         factory = coerce_factory(factory_like)
@@ -150,9 +160,11 @@ def _build_handlers(cfg: StruktConfig, llm: LLMClient, memory: MemoryEngine | No
     return handlers
 
 
-def _build_middleware(config: StruktConfig, *, llm: LLMClient, memory: MemoryEngine | None) -> list[Middleware]:
+def _build_middleware(
+    config: StruktConfig, *, llm: LLMClient, memory: MemoryEngine | None
+) -> list[Middleware]:
     middlewares: list[Middleware] = []
-    for item in (config.middleware or []):
+    for item in config.middleware or []:
         # item is normalized to MiddlewareConfig
         mc: MiddlewareConfig = item  # type: ignore[assignment]
         fac = load_factory(mc.factory)
@@ -216,5 +228,3 @@ def create(config: StruktConfig) -> Strukt:
         middleware=middleware,
     )
     return Strukt(engine)
-
-

@@ -39,10 +39,14 @@ class Engine:
         grouped = self._group_parts_by_type(state)
         return self._execute_grouped_handlers(state, grouped, fallback)
 
-    def _classify(self, state: InvocationState) -> tuple[InvocationState, QueryClassification]:
+    def _classify(
+        self, state: InvocationState
+    ) -> tuple[InvocationState, QueryClassification]:
         state = apply_before_classify(self._middleware, state)
         classification: QueryClassification = self._classifier.classify(state)
-        state, classification = apply_after_classify(self._middleware, state, classification)
+        state, classification = apply_after_classify(
+            self._middleware, state, classification
+        )
         state.query_types = list(classification.query_types)
         state.confidences = list(classification.confidences)
         state.parts = list(classification.parts)
@@ -76,5 +80,3 @@ class Engine:
             result = handler.handle(state, parts)
             results.append(apply_after_handle(self._middleware, state, qtype, result))
         return results
-
-

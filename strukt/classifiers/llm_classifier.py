@@ -15,8 +15,7 @@ class ClassificationOut(BaseModel):
     parts: List[str]
 
 
-DEFAULT_CLASSIFIER_TEMPLATE = (
-    """
+DEFAULT_CLASSIFIER_TEMPLATE = """
 Current UTC: {current_time}
 
 You are an intent classifier.
@@ -51,7 +50,6 @@ Output specification (must be valid JSON):
 User request:
 {text}
 """
-)
 
 
 class DefaultLLMClassifier(Classifier):
@@ -91,11 +89,18 @@ class DefaultLLMClassifier(Classifier):
             # Normalize lengths
             n = min(len(qt), len(cf), len(pr)) or 0
             if n == 0:
-                return QueryClassification(query_types=[StruktQueryEnum.GENERAL], confidences=[1.0], parts=[state.text])
-            return QueryClassification(query_types=qt[:n], confidences=cf[:n], parts=pr[:n])
+                return QueryClassification(
+                    query_types=[StruktQueryEnum.GENERAL],
+                    confidences=[1.0],
+                    parts=[state.text],
+                )
+            return QueryClassification(
+                query_types=qt[:n], confidences=cf[:n], parts=pr[:n]
+            )
         except Exception:
             # Fallback if LLM parsing fails
-            return QueryClassification(query_types=[StruktQueryEnum.GENERAL], confidences=[0.7], parts=[state.text])
-
-
-
+            return QueryClassification(
+                query_types=[StruktQueryEnum.GENERAL],
+                confidences=[0.7],
+                parts=[state.text],
+            )

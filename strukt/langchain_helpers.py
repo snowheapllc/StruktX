@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Type
+from typing import Any, Type
 
 from pydantic import BaseModel
 from langchain_core.prompts import PromptTemplate
@@ -23,7 +23,9 @@ class LangChainLLMClient(LLMClient):
     def invoke(self, prompt: str, **kwargs: Any) -> Any:
         return self._chat_model.invoke(prompt, **kwargs)
 
-    def structured(self, prompt: str, output_model: Type[BaseModel], **kwargs: Any) -> Any:
+    def structured(
+        self, prompt: str, output_model: Type[BaseModel], **kwargs: Any
+    ) -> Any:
         try:
             from langchain_core.output_parsers import PydanticOutputParser
             from langchain_core.prompts import PromptTemplate
@@ -33,35 +35,27 @@ class LangChainLLMClient(LLMClient):
             ) from exc
 
         parser = PydanticOutputParser(pydantic_object=output_model)
-        # Auto-detect variables from the prompt; default to a single variable 'prompt'
-        import re
-        vars_in_prompt = re.findall(r"\{([^}]+)\}", prompt)
-        if not vars_in_prompt:
-            vars_in_prompt = ["prompt"]
-            template = prompt + self._format_instructions
-        else:
-            template = prompt + self._format_instructions
+        # Always wrap the entire prompt as a single variable to avoid brace conflicts in JSON examples
+        safe_template = "{prompt}" + self._format_instructions
         prompt_tmpl = PromptTemplate(
-            template=template,
-            input_variables=vars_in_prompt,
+            template=safe_template,
+            input_variables=["prompt"],
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
         chain = prompt_tmpl | self._chat_model | parser  # type: ignore[operator]
-        # Build inputs from kwargs or map whole prompt into 'prompt'
-        if set(vars_in_prompt) == {"prompt"}:
-            inputs = {"prompt": prompt}
-        else:
-            inputs = {name: kwargs.get(name, "") for name in vars_in_prompt}
-        return chain.invoke(inputs)
+        return chain.invoke({"prompt": prompt})
 
 
 def _is_langchain_runnable(obj: Any) -> bool:
     try:
         from langchain_core.runnables import Runnable
+
         return isinstance(obj, Runnable)
     except Exception:
         # Best-effort duck-typing: common Runnable attributes
-        return hasattr(obj, "invoke") and (hasattr(obj, "astream") or hasattr(obj, "batch"))
+        return hasattr(obj, "invoke") and (
+            hasattr(obj, "astream") or hasattr(obj, "batch")
+        )
 
 
 def adapt_to_llm_client(obj: Any) -> LLMClient:
@@ -87,7 +81,6 @@ def create_structured_chain(
     llm_client: LLMClient,
     prompt_template: str,
     output_model: Type[BaseModel],
-    input_variables: List[str] | None = None,
 ) -> Runnable:
     """Build a simple structured output chain using LangChain-compatible client.
 
@@ -100,20 +93,13 @@ def create_structured_chain(
 
     parser = PydanticOutputParser(pydantic_object=output_model)
 
-    if input_variables is None:
-        import re
-        input_variables = re.findall(r"\{([^}]+)\}", prompt_template)
-        input_variables = [v for v in input_variables if v != "format_instructions"]
-
+    # Use a safe wrapper so JSON braces in prompt_template do not become variables
     prompt = PromptTemplate(
-        template=prompt_template + "\n{format_instructions}",
-        input_variables=input_variables,
+        template="{prompt}\n{format_instructions}",
+        input_variables=["prompt"],
         partial_variables={"format_instructions": parser.get_format_instructions()},
     )
 
     # If using our adapter, unwrap to underlying runnable for best LC integration
     underlying: Any = getattr(llm_client, "_chat_model", llm_client)
     return prompt | underlying | parser  # type: ignore[operator]
-
-
-
