@@ -130,7 +130,7 @@ Contributions are welcome! Please report any issues, bugs, improvements, or feat
 
 ## Support
 
-- 📖 [Documentation](https://struktx.vercel.app/docs)
+- 📖 [Documentation](https://struktx.snowheap.ai/docs)
 - 🐛 [Issue Tracker](https://github.com/snowheapllc/StruktX/issues)
 - 💬 [Discussions](https://github.com/snowheapllc/StruktX/discussions)
 
