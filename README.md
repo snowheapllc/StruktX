@@ -76,10 +76,10 @@ from strukt.langchain_helpers import LangChainLLMClient
 
 # Create LangChain LLM client
 langchain_llm = ChatOpenAI(api_key="your-openai-api-key")
-llm_client = LangChainLLMClient(langchain_llm)
+llm = LangChainLLMClient(langchain_llm)
 
 app = create(StruktConfig(
-    llm=LLMClientConfig(llm_client),
+    llm=LLMClientConfig(llm),
     classifier=ClassifierConfig(
         factory=DefaultLLMClassifier(
             llm=llm,
@@ -93,6 +93,8 @@ app = create(StruktConfig(
         default_route="general",
     ),
 ))
+
+app.invoke("What is the time in Tokyo?")
 ```
 
 ## What is StruktX?
