@@ -125,7 +125,7 @@ class MemoryExtractionMiddleware(Middleware):
         context: str | None = None
 
     class MemoryBatch(BaseModel):
-        items: list["MemoryExtractionMiddleware.MemoryItem"] = []  # type: ignore[name-defined]
+        items: list[MemoryExtractionMiddleware.MemoryItem] = []  # type: ignore[name-defined]
 
     def __init__(self, llm: LLMClient, store: KnowledgeStore | None) -> None:
         self._llm = llm

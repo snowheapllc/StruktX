@@ -99,22 +99,22 @@ class MemoryAugmentedLLMClient(LLMClient):
             if not docs:
                 retrieval_query = query_hint or prompt
                 if hasattr(self._memory, "get_scoped") and callable(
-                    getattr(self._memory, "get_scoped")
+                    self._memory.get_scoped
                 ):
-                    docs = getattr(self._memory, "get_scoped")(
+                    docs = self._memory.get_scoped(
                         retrieval_query,
                         user_id=user_id,
                         unit_id=unit_id,
                         top_k=self._top_k,
                     )  # type: ignore[call-arg]
                 elif hasattr(self._memory, "get") and callable(
-                    getattr(self._memory, "get")
+                    self._memory.get
                 ):
                     docs = self._memory.get(retrieval_query, self._top_k)  # type: ignore[arg-type]
                 elif hasattr(self._memory, "retrieve") and callable(
-                    getattr(self._memory, "retrieve")
+                    self._memory.retrieve
                 ):
-                    docs = getattr(self._memory, "retrieve")(
+                    docs = self._memory.retrieve(
                         retrieval_query, self._top_k
                     )  # type: ignore[call-arg]
         except Exception:

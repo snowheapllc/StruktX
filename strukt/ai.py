@@ -211,7 +211,7 @@ def create(config: StruktConfig) -> Strukt:
         if getattr(config.memory, "use_store", False) and memory is not None:
             store = KnowledgeStore(engine=memory)
             # expose store on engine for advanced users (duck-typed)
-            setattr(memory, "store", store)
+            memory.store = store
     except Exception:
         store = None
     # Wrap LLM with memory augmentation when enabled
