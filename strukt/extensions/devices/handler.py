@@ -5,7 +5,8 @@ from typing import List
 
 from strukt.interfaces import Handler, LLMClient
 from strukt.types import HandlerResult, InvocationState
-from strukt.logging import get_logger, render_prompt_with_safe_braces
+from strukt.logging import get_logger
+from strukt.prompts import render_prompt_with_safe_braces
 
 from .models import DeviceControlResponse
 from .toolkit import DeviceToolkit

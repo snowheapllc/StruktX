@@ -656,7 +656,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   "mcpServers": {
     "struktx": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://struktx.vercel.app/api/mcp"]
+      "args": ["-y", "mcp-remote", "https://struktx.snowheap.ai/api/mcp"]
     }
   }
 }
@@ -670,7 +670,7 @@ Add to `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "struktx": {
-      "url": "https://struktx.vercel.app/api/mcp"
+      "url": "https://struktx.snowheap.ai/api/mcp"
     }
   }
 }
@@ -684,7 +684,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "struktx": {
-      "url": "https://struktx.vercel.app/api/mcp"
+      "url": "https://struktx.snowheap.ai/api/mcp"
     }
   }
 }

@@ -189,26 +189,15 @@ class MemoryExtractionMiddleware(Middleware):
                     + "\n\nDO NOT extract memories that are duplicates or very similar to the existing ones above."
                 )
 
-            prompt = (
-                "You will extract useful, durable memory entries from a user interaction.\n"
-                "Existing memories (avoid duplicates):\n{existing_context}\n"
-                "Input text: {text}\n"
-                "Final response: {response}\n\n"
-                "STRICT CRITERIA:\n"
-                "- Only extract durable user information (e.g., preferences, recurring behaviors, stable locations).\n"
-                "- Do NOT extract transient questions, requests, or external facts (e.g., 'best place...', 'what is...').\n"
-                "- Do NOT extract memories that duplicate or closely resemble existing memories listed above.\n"
-                "- If nothing durable is present, return an empty list.\n\n"
-                "Return JSON with an array 'items', where each item has: category (one of location, preference, behavior, context, other),\n"
-                "key (short identifier), value (brief content), and optional context. If none, return items: [].\n"
-            )
+            from ..prompts import MEMORY_EXTRACTION_PROMPT_TEMPLATE
+            
             payload = {
                 "text": state.text,
                 "response": result.response,
                 "existing_context": existing_context,
             }
             out = self._llm.structured(
-                prompt.format(**payload),
+                MEMORY_EXTRACTION_PROMPT_TEMPLATE.format(**payload),
                 MemoryExtractionMiddleware.MemoryBatch,
                 context=state.context,
                 query_hint=state.text,

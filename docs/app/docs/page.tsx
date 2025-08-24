@@ -768,7 +768,7 @@ for _ in range(5):
   "mcpServers": {
     "struktx": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://struktx.vercel.app/api/mcp"]
+      "args": ["-y", "mcp-remote", "${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}/api/mcp"]
     }
   }
 }`} />
@@ -777,7 +777,7 @@ for _ in range(5):
         <CodeBlock className="code-block" language="json" filename=".cursor/mcp.json" code={`{
   "mcpServers": {
     "struktx": {
-      "url": "https://struktx.vercel.app/api/mcp"
+      "url": "${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}/api/mcp"
     }
   }
 }`} />
@@ -786,7 +786,7 @@ for _ in range(5):
         <CodeBlock className="code-block" language="json" filename="/.codeium/windsurf/mcp_config.json" code={`{
   "mcpServers": {
     "struktx": {
-      "url": "https://struktx.vercel.app/api/mcp"
+      "url": "${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}/api/mcp"
     }
   }
 }`} />

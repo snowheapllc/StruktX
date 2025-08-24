@@ -138,7 +138,7 @@ export default function DocsLayout({ children }: Readonly<PropsWithChildren>) {
               </div>
             </nav>
           </aside>
-          <main className="lg:col-span-9 space-y-24 md:space-y-28">
+          <main className="lg:col-span-9 md:space-y-28">
             {children}
           </main>
         </div>

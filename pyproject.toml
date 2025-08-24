@@ -86,11 +86,11 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/struktx/struktx"
-Documentation = "https://struktx.readthedocs.io"
-Repository = "https://github.com/struktx/struktx.git"
-"Bug Tracker" = "https://github.com/struktx/struktx/issues"
-"Source Code" = "https://github.com/struktx/struktx"
+Homepage = "https://github.com/snowheapllc/struktx"
+Documentation = "https://struktx.snowheap.ai"
+Repository = "https://github.com/snowheapllc/struktx.git"
+"Bug Tracker" = "https://github.com/snowheapllc/struktx/issues"
+"Source Code" = "https://github.com/snowheapllc/struktx"
 
 [project.scripts]
 struktx = "strukt.cli:main"

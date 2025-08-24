@@ -10,7 +10,7 @@ export const size = {
 export default async function Image() {
   try {
     // Load the blue logo
-    const logoBlueData = await fetch(new URL('/logo-blue.png', 'https://struktx.vercel.app')).then(
+    const logoBlueData = await fetch(new URL('/logo-blue.png', process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app')).then(
       (res) => res.arrayBuffer(),
     );
 

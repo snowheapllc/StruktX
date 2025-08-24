@@ -1,21 +1,23 @@
 import { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app';
+  
   return [
     {
-      url: 'https://struktx.vercel.app',
+      url: baseUrl,
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 1,
     },
     {
-      url: 'https://struktx.vercel.app/docs',
+      url: `${baseUrl}/docs`,
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
-      url: 'https://struktx.vercel.app/github',
+      url: `${baseUrl}/github`,
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.7,

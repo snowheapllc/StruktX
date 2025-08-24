@@ -8,7 +8,7 @@ import { ThemeProvider } from '@/lib/theme'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://struktx.vercel.app'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'),
   title: {
     default: 'StruktX - A Lean Core with Swappable Pieces',
     template: '%s | StruktX'
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
             openGraph: {
         type: 'website',
         locale: 'en_US',
-        url: 'https://struktx.vercel.app',
+        url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}`,
         siteName: 'StruktX',
         title: 'StruktX - A Lean Core with Swappable Pieces',
         description: 'A lean core with swappable pieces. StruktX is a configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory. Built for engineers, made to ship.',
@@ -92,7 +92,7 @@ export const metadata: Metadata = {
         ],
       },
   alternates: {
-    canonical: 'https://struktx.vercel.app',
+    canonical: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}`,
   },
   category: 'technology',
   classification: 'AI Framework',
@@ -167,7 +167,7 @@ export default function RootLayout({
               "@type": "SoftwareApplication",
               "name": "StruktX",
               "description": "A lean core with swappable pieces. StruktX is a configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory.",
-              "url": "https://struktx.vercel.app",
+              "url": `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}`,
               "applicationCategory": "DeveloperApplication",
               "operatingSystem": "Any",
               "programmingLanguage": "Python",
@@ -180,9 +180,9 @@ export default function RootLayout({
                 "price": "0",
                 "priceCurrency": "USD"
               },
-              "image": "https://struktx.vercel.app/logo-blue.png",
-              "logo": "https://struktx.vercel.app/logo-blue.png",
-              "screenshot": "https://struktx.vercel.app/nobg-both-white.png",
+              "image": `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}/logo-blue.png`,
+              "logo": `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}/logo-blue.png`,
+              "screenshot": `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}/nobg-both-white.png`,
               "keywords": "AI framework, machine learning, LLM, Python, type safety, configurable, swappable components",
               "datePublished": "2024-01-01",
               "dateModified": "2024-01-01"
@@ -198,11 +198,11 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "Organization",
               "name": "StruktX",
-              "url": "https://struktx.vercel.app",
-              "logo": "https://struktx.vercel.app/logo-blue.png",
+              "url": `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}`,
+              "logo": `${process.env.NEXT_PUBLIC_BASE_URL || 'https://struktx.vercel.app'}/logo-blue.png`,
               "description": "A lean core with swappable pieces. StruktX is a configurable, typed AI framework.",
               "sameAs": [
-                "https://github.com/struktx/struktx",
+                "https://github.com/snowheapllc/struktx",
                 "https://twitter.com/struktx"
               ]
             })

@@ -101,13 +101,9 @@ class TimeHandler(Handler):
             injected_docs = []
         injected_list = [f"- {d}" for d in injected_docs]
         mem_block = ("\n".join(injected_list)) if injected_list else "- none"
-        probe_prompt = (
-            "You are assisting a time query.\n"
-            "Known facts (from memory):\n"
-            f"{mem_block}\n\n"
-            "Task: If any item indicates the user's city or timezone, return exactly one line: MEM_PROBE: <city-or-timezone>.\n"
-            "If not enough information, return exactly: MEM_PROBE: none."
-        )
+        from ..prompts import TIME_PROBE_PROMPT_TEMPLATE
+        
+        probe_prompt = TIME_PROBE_PROMPT_TEMPLATE.format(mem_block=mem_block)
         try:
             self._log.prompt("Time Probe Prompt", probe_prompt)
             probe_resp = self._llm.invoke(

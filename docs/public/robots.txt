@@ -3,4 +3,4 @@ Allow: /
 Disallow: /api/
 Disallow: /admin/
 
-Sitemap: https://struktx.vercel.app/sitemap.xml
+Sitemap: https://struktx.snowheap.ai/sitemap.xml

@@ -29,7 +29,7 @@ class AwsSigV4Signer:
     """AWS SigV4 signer using default boto3 credential resolution.
 
     This signer is optional and only used when composed with transports that
-    require SigV4. It is fully decoupled from any Roomi specifics.
+    require SigV4.
     """
 
     def __init__(
