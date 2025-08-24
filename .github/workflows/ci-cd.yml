@@ -51,12 +51,12 @@ jobs:
         
     - name: Run linting
       run: |
-        uv run black --check .
-        uv run isort --check-only .
-        uv run flake8 .
+        uv run black --check strukt/ tests/
+        uv run isort --check-only strukt/ tests/
+        uv run ruff check strukt/ tests/
         
     - name: Run type checking
-      run: uv run mypy strukt/
+      run: uv run mypy strukt/ --exclude=site-packages
       
     - name: Run tests
       run: uv run pytest tests/ -v --cov=strukt --cov-report=xml
