@@ -25,7 +25,8 @@ llm = LLMClientConfig(
 )`;
 
 const classifierCode = `from strukt import ClassifierConfig
-from strukt.classifiers.llm_classifier import DefaultLLMClassifier, DEFAULT_CLASSIFIER_TEMPLATE
+from strukt.classifiers.llm_classifier import DefaultLLMClassifier
+from strukt.prompts import DEFAULT_CLASSIFIER_TEMPLATE
 
 classifier = ClassifierConfig(
   DefaultLLMClassifier,

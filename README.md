@@ -67,7 +67,8 @@ uv pip install struktx[all]
 ## Quick Start with LangChain
 ```python
 from strukt import create, StruktConfig, HandlersConfig, LLMClientConfig, ClassifierConfig
-from strukt.classifiers.llm_classifier import DefaultLLMClassifier, DEFAULT_CLASSIFIER_TEMPLATE
+from strukt.classifiers.llm_classifier import DefaultLLMClassifier
+from strukt.prompts import DEFAULT_CLASSIFIER_TEMPLATE
 from strukt.examples.time_handler import TimeHandler
 
 from langchain_openai import ChatOpenAI
