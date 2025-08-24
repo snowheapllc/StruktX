@@ -19,34 +19,34 @@
 ### Using uv (Recommended)
 ```bash
 # Install with core dependencies only
-uv pip install struktx
+uv pip install struktx-ai
 
 # Install with LLM support (LangChain)
-uv pip install struktx[llm]
+uv pip install struktx-ai[llm]
 
 # Install with vector store support
-uv pip install struktx[vector]
+uv pip install struktx-ai[vector]
 
 # Install with all optional dependencies
-uv pip install struktx[all]
+uv pip install struktx-ai[all]
 
 # Install for development
-uv pip install struktx[dev]
+uv pip install struktx-ai[dev]
 ```
 
 ### Using pip
 ```bash
 # Install with core dependencies only
-pip install struktx
+pip install struktx-ai
 
 # Install with LLM support (LangChain)
-pip install struktx[llm]
+pip install struktx-ai[llm]
 
 # Install with vector store support
-pip install struktx[vector]
+pip install struktx-ai[vector]
 
 # Install with all optional dependencies
-pip install struktx[all]
+pip install struktx-ai[all]
 ```
 
 ### Source
@@ -61,7 +61,7 @@ source .venv/bin/activate
 uv sync
 
 # Install finall Strukt package
-uv pip install struktx[all]
+uv pip install struktx-ai[all]
 ```
 
 ## Quick Start with LangChain
