@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from ..interfaces import MemoryEngine
-from .memory_types import KnowledgeNode, KnowledgeEdge, KnowledgeCategory
-from .memory import build_node, build_edge, batch_add_nodes, batch_add_edges
+from .memory import batch_add_edges, batch_add_nodes, build_edge, build_node
+from .memory_types import KnowledgeCategory, KnowledgeEdge, KnowledgeNode
 
 
 class KnowledgeStore:

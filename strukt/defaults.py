@@ -4,9 +4,9 @@ from typing import Any, List, Type
 
 from pydantic import BaseModel
 
-from .interfaces import LLMClient, Classifier, Handler, MemoryEngine
+from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
 from .prompts import render_prompt_with_safe_braces
-from .types import InvocationState, QueryClassification, HandlerResult, StruktQueryEnum
+from .types import HandlerResult, InvocationState, QueryClassification, StruktQueryEnum
 
 
 class SimpleLLMClient(LLMClient):

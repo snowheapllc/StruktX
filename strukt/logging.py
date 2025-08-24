@@ -3,19 +3,16 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.json import JSON as RichJSON
-from rich.traceback import install as rich_tracebacks
+from rich.panel import Panel
 from rich.table import Table
-
-from typing import Tuple, List
+from rich.traceback import install as rich_tracebacks
 
 from .middleware import Middleware
-from .types import InvocationState, HandlerResult, QueryClassification
-
+from .types import HandlerResult, InvocationState, QueryClassification
 
 _GLOBAL_CONSOLE: Console | None = None
 
@@ -28,8 +25,6 @@ def _get_console() -> Console:
         if os.getenv("STRUKTX_RICH_TRACEBACK", "1") != "0":
             rich_tracebacks(show_locals=False)
     return _GLOBAL_CONSOLE
-
-
 
 
 class StruktLogger:

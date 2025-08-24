@@ -7,8 +7,8 @@ from rich.console import Console
 from rich.panel import Panel
 
 from ..interfaces import Handler, LLMClient
-from ..types import InvocationState, HandlerResult
 from ..logging import get_logger
+from ..types import HandlerResult, InvocationState
 
 
 class TimeHandler(Handler):
@@ -102,7 +102,7 @@ class TimeHandler(Handler):
         injected_list = [f"- {d}" for d in injected_docs]
         mem_block = ("\n".join(injected_list)) if injected_list else "- none"
         from ..prompts import TIME_PROBE_PROMPT_TEMPLATE
-        
+
         probe_prompt = TIME_PROBE_PROMPT_TEMPLATE.format(mem_block=mem_block)
         try:
             self._log.prompt("Time Probe Prompt", probe_prompt)

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import os
+
+from pydantic import BaseModel
 from rich.console import Console
 from rich.table import Table
 
-from ..middleware import Middleware
-from ..types import InvocationState, HandlerResult
 from ..interfaces import LLMClient
 from ..memory import KnowledgeStore, build_node
-from pydantic import BaseModel
-import os
+from ..middleware import Middleware
+from ..types import HandlerResult, InvocationState
 
 
 class MemoryExtractionMiddleware(Middleware):

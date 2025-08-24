@@ -4,14 +4,14 @@ from collections import defaultdict
 from typing import Dict, List
 
 from .interfaces import Classifier, Handler, MemoryEngine
-from .types import InvocationState, HandlerResult, QueryClassification, StruktQueryEnum
 from .middleware import (
     Middleware,
-    apply_before_classify,
     apply_after_classify,
-    apply_before_handle,
     apply_after_handle,
+    apply_before_classify,
+    apply_before_handle,
 )
+from .types import HandlerResult, InvocationState, QueryClassification, StruktQueryEnum
 
 
 class Engine:

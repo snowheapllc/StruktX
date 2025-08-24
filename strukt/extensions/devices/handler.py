@@ -4,18 +4,18 @@ import json
 from typing import List
 
 from strukt.interfaces import Handler, LLMClient
-from strukt.types import HandlerResult, InvocationState
 from strukt.logging import get_logger
 from strukt.prompts import render_prompt_with_safe_braces
+from strukt.types import HandlerResult, InvocationState
 
 from .models import DeviceControlResponse
-from .toolkit import DeviceToolkit
 from .prompts import (
+    DEVICE_CONTROL_HANDLER_PROMPT_TEMPLATE,
     determine_device_providers,
     get_device_instruction_for_provider,
     get_mixed_provider_instruction,
-    DEVICE_CONTROL_HANDLER_PROMPT_TEMPLATE,
 )
+from .toolkit import DeviceToolkit
 
 
 class DeviceControlHandler(Handler):
@@ -111,9 +111,11 @@ class DeviceControlHandler(Handler):
             )
             self._log.json(
                 "Structured DeviceControlResponse",
-                structured.model_dump()
-                if hasattr(structured, "model_dump")
-                else structured,
+                (
+                    structured.model_dump()
+                    if hasattr(structured, "model_dump")
+                    else structured
+                ),
             )  # type: ignore[attr-defined]
             if not getattr(structured, "commands", None):
                 self._log.warn(

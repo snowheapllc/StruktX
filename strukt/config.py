@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Union
 
-
 # Factories may be callables or import strings; resolved at create().
 Factory = Union[str, Callable[..., Any]]
 

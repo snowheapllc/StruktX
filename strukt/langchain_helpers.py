@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Type
 
-from pydantic import BaseModel
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import Runnable
-from langchain_core.language_models.chat_models import BaseChatModel
+from pydantic import BaseModel
 
 from .interfaces import LLMClient
 

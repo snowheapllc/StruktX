@@ -1,11 +1,11 @@
+from .memory import UpstashVectorMemoryEngine, batch_add_nodes, build_edge, build_node
 from .memory_store import KnowledgeStore
 from .memory_types import (
-    KnowledgeNode,
-    KnowledgeEdge,
     KnowledgeCategory,
+    KnowledgeEdge,
+    KnowledgeNode,
     KnowledgeStats,
 )
-from .memory import build_node, build_edge, batch_add_nodes, UpstashVectorMemoryEngine
 from .middleware import MemoryExtractionMiddleware
 
 __all__ = [

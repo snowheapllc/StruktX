@@ -7,7 +7,6 @@ from strukt.logging import get_logger
 
 from .models import DeviceCommand
 
-
 _log = get_logger("devices.validation")
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Protocol, runtime_checkable
 
-from .types import InvocationState, QueryClassification, HandlerResult
+from .types import HandlerResult, InvocationState, QueryClassification
 
 
 @runtime_checkable

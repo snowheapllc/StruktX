@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from ..interfaces import MemoryEngine
-from .memory_types import KnowledgeNode, KnowledgeCategory, KnowledgeEdge
+from .memory_types import KnowledgeCategory, KnowledgeEdge, KnowledgeNode
 
 
 class UpstashVectorMemoryEngine(MemoryEngine):
@@ -40,6 +40,7 @@ class UpstashVectorMemoryEngine(MemoryEngine):
         self._default_unit_id = default_unit_id
         try:
             import os
+
             from upstash_vector import Index  # type: ignore
 
             url = index_url or os.getenv("UPSTASH_VECTOR_REST_URL")
@@ -93,9 +94,9 @@ class UpstashVectorMemoryEngine(MemoryEngine):
             user_id=md.get("user_id", self._default_user_id),
             unit_id=md.get("unit_id", self._default_unit_id),
             confidence=float(md.get("confidence", 1.0)),
-            metadata={md.get("meta_key", ""): md.get("meta_val", "")}
-            if metadata
-            else {},
+            metadata=(
+                {md.get("meta_key", ""): md.get("meta_val", "")} if metadata else {}
+            ),
             source_id=md.get("source_id"),
         )
 

@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import os
 from typing import Callable, List, Tuple
+
+from pydantic import BaseModel
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from ..middleware import Middleware
-from ..types import InvocationState, QueryClassification, HandlerResult
 from ..interfaces import LLMClient
 from ..memory import KnowledgeStore, build_node
-from pydantic import BaseModel
-import os
+from ..middleware import Middleware
+from ..types import HandlerResult, InvocationState, QueryClassification
 
 
 class LoggingMiddleware(Middleware):
@@ -190,7 +191,7 @@ class MemoryExtractionMiddleware(Middleware):
                 )
 
             from ..prompts import MEMORY_EXTRACTION_PROMPT_TEMPLATE
-            
+
             payload = {
                 "text": state.text,
                 "response": result.response,

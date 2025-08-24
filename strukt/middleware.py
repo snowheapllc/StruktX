@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import List, Tuple
 
-from .types import InvocationState, QueryClassification, HandlerResult
+from .types import HandlerResult, InvocationState, QueryClassification
 
 
 class Middleware(ABC):

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import uuid
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
-import uuid
 
 
 class KnowledgeCategory(str, Enum):

@@ -25,12 +25,8 @@ def print_banner():
     """Print the StruktX AI banner"""
     banner = Text("StruktX AI", style="bold blue")
     subtitle = Text("Configurable AI Framework", style="italic")
-    
-    panel = Panel(
-        f"{banner}\n{subtitle}",
-        border_style="blue",
-        padding=(1, 2)
-    )
+
+    panel = Panel(f"{banner}\n{subtitle}", border_style="blue", padding=(1, 2))
     console.print(panel)
 
 
@@ -42,31 +38,33 @@ async def run_chat(config_path: Optional[str] = None, message: Optional[str] = N
             config = StruktConfig.from_file(config_path)
         else:
             config = StruktConfig()
-        
+
         # Initialize AI
         ai = Strukt(config)
-        
+
         if message:
             # Single message mode
             response = await ai.chat(message)
             console.print(f"[green]AI Response:[/green] {response}")
         else:
             # Interactive mode
-            console.print("[yellow]Entering interactive mode. Type 'quit' to exit.[/yellow]")
+            console.print(
+                "[yellow]Entering interactive mode. Type 'quit' to exit.[/yellow]"
+            )
             while True:
                 try:
                     user_input = input("\n[blue]You:[/blue] ")
-                    if user_input.lower() in ['quit', 'exit', 'q']:
+                    if user_input.lower() in ["quit", "exit", "q"]:
                         break
-                    
+
                     if user_input.strip():
                         response = await ai.chat(user_input)
                         console.print(f"[green]AI:[/green] {response}")
-                        
+
                 except KeyboardInterrupt:
                     console.print("\n[yellow]Exiting...[/yellow]")
                     break
-                    
+
     except Exception as e:
         logger.error(f"Error running chat: {e}")
         console.print(f"[red]Error:[/red] {e}")
@@ -83,38 +81,28 @@ Examples:
   struktx-ai --config config.yaml --message "Hello, how are you?"
   struktx-ai --interactive
   struktx-ai --version
-        """
+        """,
     )
-    
+
+    parser.add_argument("--config", "-c", type=str, help="Path to configuration file")
+
     parser.add_argument(
-        "--config", "-c",
-        type=str,
-        help="Path to configuration file"
+        "--message", "-m", type=str, help="Single message to send to AI"
     )
-    
+
     parser.add_argument(
-        "--message", "-m",
-        type=str,
-        help="Single message to send to AI"
+        "--interactive", "-i", action="store_true", help="Start interactive chat mode"
     )
-    
+
     parser.add_argument(
-        "--interactive", "-i",
-        action="store_true",
-        help="Start interactive chat mode"
+        "--version", "-v", action="version", version="struktx-ai 0.0.1-beta"
     )
-    
-    parser.add_argument(
-        "--version", "-v",
-        action="version",
-        version="struktx-ai 0.0.1-beta"
-    )
-    
+
     args = parser.parse_args()
-    
+
     # Print banner
     print_banner()
-    
+
     # Determine mode
     if args.message:
         # Single message mode

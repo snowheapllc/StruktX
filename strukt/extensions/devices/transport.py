@@ -1,21 +1,22 @@
 from __future__ import annotations
 
+import json as _json
 from typing import (
     Any,
+    Callable,
     Dict,
     Iterable,
     List,
     Optional,
     Protocol,
     runtime_checkable,
-    Callable,
 )
-import json as _json
 
 import httpx
 
-from .models import DeviceCommand
 from strukt.logging import get_logger
+
+from .models import DeviceCommand
 
 
 @runtime_checkable

@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Dict, Any
+
+from typing import Any, Dict
 
 
 def format_prompt_preserving_json(template: str, variables: Dict[str, Any]) -> str:

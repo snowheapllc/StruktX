@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import List, Optional
 from datetime import datetime, timezone
+from typing import List, Optional
 
 from pydantic import BaseModel
 
 from ..interfaces import Classifier, LLMClient
-from ..types import InvocationState, QueryClassification, StruktQueryEnum
 from ..prompts import DEFAULT_CLASSIFIER_TEMPLATE
+from ..types import InvocationState, QueryClassification, StruktQueryEnum
 
 
 class ClassificationOut(BaseModel):

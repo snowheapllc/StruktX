@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional
 
+from strukt.logging import get_logger
+
 from .models import DeviceCommand
 from .transport import DeviceTransport
 from .validation import DeviceCommandValidator
-from strukt.logging import get_logger
 
 
 class DeviceToolkit:
