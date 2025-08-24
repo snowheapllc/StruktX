@@ -1,4 +1,4 @@
-name: PyPi Release
+name: PyPi Deploy
 
 on:
   push:
