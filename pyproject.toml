@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "struktx-ai"
-version = "0.0.1-beta"
+version = "0.0.1-beta1"
 description = "A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "StruktX Team", email = "team@struktx.dev"}
+    {name = "StruktX Team", email = "info@snowheap.com"}
 ]
 maintainers = [
-    {name = "StruktX Team", email = "team@struktx.dev"}
+    {name = "StruktX Team", email = "info@snowheap.com"}
 ]
 keywords = ["ai", "llm", "framework", "chatbot", "nlp", "langchain"]
 classifiers = [
