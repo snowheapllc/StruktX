@@ -7,3 +7,4 @@ test-examples/
 full_example.py
 .ruff_cache/
 package-lock.json
+dist/

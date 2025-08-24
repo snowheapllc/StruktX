@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "struktx"
-version = "0.1.0"
+version = "0.0.1-beta"
 description = "A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory"
 readme = "README.md"
 license = {text = "MIT"}
