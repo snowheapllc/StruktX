@@ -5,8 +5,8 @@ StruktX AI CLI - Command line interface for the StruktX AI framework
 
 import argparse
 import asyncio
-import sys
 from pathlib import Path
+import sys
 from typing import Optional
 
 from rich.console import Console
