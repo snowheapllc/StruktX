@@ -33,6 +33,9 @@ jobs:
       with:
         version: "latest"
         
+    - name: Create virtual environment
+      run: uv venv
+        
     - name: Cache dependencies
       uses: actions/cache@v3
       with:
@@ -86,6 +89,9 @@ jobs:
       with:
         version: "latest"
         
+    - name: Create virtual environment
+      run: uv venv
+        
     - name: Install build dependencies
       run: |
         uv pip install -e ".[dev,all]"
@@ -121,6 +127,9 @@ jobs:
       uses: astral-sh/setup-uv@v2
       with:
         version: "latest"
+        
+    - name: Create virtual environment
+      run: uv venv
         
     - name: Download build artifacts
       uses: actions/download-artifact@v3
