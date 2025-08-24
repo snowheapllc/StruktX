@@ -7543,7 +7543,7 @@ wheels = [
 ]
 
 [[package]]
-name = "struktx"
+name = "struktx-ai"
 version = "0.0.1b0"
 source = { editable = "." }
 dependencies = [

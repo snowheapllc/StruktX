@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "struktx"
+name = "struktx-ai"
 version = "0.0.1-beta"
 description = "A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory"
 readme = "README.md"
@@ -85,6 +85,8 @@ all = [
     "sentence-transformers>=2.7.0",
 ]
 
+
+
 [project.urls]
 Homepage = "https://github.com/snowheapllc/struktx"
 Documentation = "https://struktx.snowheap.ai"
@@ -93,7 +95,7 @@ Repository = "https://github.com/snowheapllc/struktx.git"
 "Source Code" = "https://github.com/snowheapllc/struktx"
 
 [project.scripts]
-struktx = "strukt.cli:main"
+struktx-ai = "strukt.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["strukt"]
