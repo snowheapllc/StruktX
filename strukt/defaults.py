@@ -107,9 +107,7 @@ class MemoryAugmentedLLMClient(LLMClient):
                         unit_id=unit_id,
                         top_k=self._top_k,
                     )  # type: ignore[call-arg]
-                elif hasattr(self._memory, "get") and callable(
-                    self._memory.get
-                ):
+                elif hasattr(self._memory, "get") and callable(self._memory.get):
                     docs = self._memory.get(retrieval_query, self._top_k)  # type: ignore[arg-type]
                 elif hasattr(self._memory, "retrieve") and callable(
                     self._memory.retrieve
