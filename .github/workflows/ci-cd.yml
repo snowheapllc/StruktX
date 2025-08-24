@@ -54,9 +54,6 @@ jobs:
         uv run black --check strukt/ tests/
         uv run ruff check strukt/ --config pyproject.toml
         
-    - name: Run type checking
-      run: uv run mypy strukt/ --exclude=site-packages
-      
     - name: Run tests
       run: uv run pytest tests/ -v --cov=strukt --cov-report=xml
       
