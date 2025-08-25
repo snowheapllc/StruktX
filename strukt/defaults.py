@@ -1,12 +1,203 @@
 from __future__ import annotations
 
-from typing import Any, List, Type
+from typing import Any, List, Type, Dict, Optional, Protocol, runtime_checkable
+from collections.abc import Iterable
+
+import httpx
+import json as _json
+from datetime import datetime
 
 from pydantic import BaseModel
 
 from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
 from .prompts import render_prompt_with_safe_braces
 from .types import HandlerResult, InvocationState, QueryClassification, StruktQueryEnum
+from .logging import get_logger
+
+
+class DateTimeEncoder(_json.JSONEncoder):
+    """Custom JSON encoder that handles datetime objects."""
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+@runtime_checkable
+class RequestSigner(Protocol):
+    def sign(
+        self, *, method: str, url: str, headers: Dict[str, str]
+    ) -> Dict[str, str]: ...
+
+
+class AwsSigV4Signer:
+    """AWS SigV4 signer using default boto3 credential resolution.
+
+    This signer is optional and only used when composed with transports that
+    require SigV4.
+    """
+
+    def __init__(
+        self, *, service: str = "execute-api", region: str = "us-east-1"
+    ) -> None:
+        self._service = service
+        self._region = region
+
+    def sign(self, *, method: str, url: str, headers: Dict[str, str]) -> Dict[str, str]:
+        # Lazy imports so this module remains importable without AWS deps
+        import boto3  # type: ignore
+        from botocore.auth import SigV4Auth  # type: ignore
+        from botocore.awsrequest import AWSRequest  # type: ignore
+
+        session = boto3.Session()
+        credentials = session.get_credentials()
+        if not credentials:
+            raise ValueError("No AWS credentials found for SigV4 signing")
+        
+        # Create AWSRequest with headers that include the payload hash
+        # The X-Amz-Content-Sha256 header should already be set by the transport
+        request = AWSRequest(method=method, url=url, headers=headers)
+        SigV4Auth(credentials, self._service, self._region).add_auth(request)
+        return dict(request.headers)
+
+
+class BaseAWSTransport:
+    """Base AWS transport class that provides common AWS SigV4 functionality.
+    
+    This class can be inherited by specific transport implementations that need
+    AWS authentication and common HTTP operations.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        user_header: str = "x-user-id",
+        unit_header: str = "x-unit-id",
+        content_type: str = "application/json",
+        client: Optional[httpx.Client] = None,
+        signer: Optional[RequestSigner] = None,
+        log_responses: bool = False,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._user_header = user_header
+        self._unit_header = unit_header
+        self._content_type = content_type
+        self._client = client or httpx.Client(timeout=20.0)
+        self._signer = signer
+        self._log_responses = log_responses
+        self._log = get_logger(f"{self.__class__.__name__.lower()}")
+
+    def _signed_headers(
+        self,
+        *,
+        method: str,
+        url: str,
+        user_id: str,
+        unit_id: str,
+        body: Optional[bytes] = None,
+    ) -> Dict[str, str]:
+        """Generate signed headers for AWS requests."""
+        headers: Dict[str, str] = {
+            self._user_header: user_id,
+            self._unit_header: unit_id,
+            "Content-Type": self._content_type,
+        }
+        if self._signer is not None:
+            # Include body hash header to ensure SigV4 covers the payload
+            try:
+                import hashlib
+
+                sha256 = hashlib.sha256(body or b"").hexdigest()
+                headers["X-Amz-Content-Sha256"] = sha256
+            except Exception:
+                pass
+            headers = self._signer.sign(method=method, url=url, headers=headers)  # type: ignore[arg-type]
+        return headers
+
+    def _make_request(
+        self,
+        *,
+        method: str,
+        endpoint: str = "",
+        user_id: str,
+        unit_id: str,
+        body: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> httpx.Response:
+        """Make a signed HTTP request to the AWS endpoint."""
+        url = f"{self._base_url}{endpoint}"
+        
+        # Prepare body
+        body_bytes = None
+        if body is not None:
+            body_str = _json.dumps(body, separators=(",", ":"), sort_keys=True, cls=DateTimeEncoder)
+            body_bytes = body_str.encode("utf-8")
+        
+        # Get signed headers
+        request_headers = self._signed_headers(
+            method=method, url=url, user_id=user_id, unit_id=unit_id, body=body_bytes
+        )
+        
+        # Merge with additional headers
+        if headers:
+            request_headers.update(headers)
+        
+        # Log request details if enabled
+        if self._log_responses:
+            self._log_request_details(method, url, request_headers, body)
+        
+        # Make request
+        if method.upper() == "GET":
+            response = self._client.get(url, headers=request_headers)
+        elif method.upper() == "POST":
+            response = self._client.post(url, headers=request_headers, content=body_bytes)
+        elif method.upper() == "PATCH":
+            response = self._client.patch(url, headers=request_headers, content=body_bytes)
+        elif method.upper() == "DELETE":
+            response = self._client.delete(url, headers=request_headers)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+        
+        response.raise_for_status()
+        
+        # Log response details if enabled
+        if self._log_responses:
+            self._log_response_details(response)
+        
+        return response
+
+    def _log_request_details(
+        self, method: str, url: str, headers: Dict[str, str], body: Optional[Dict[str, Any]]
+    ) -> None:
+        """Log request details for debugging."""
+        try:
+            safe_headers = {
+                k: ("***" if k.lower() == "authorization" else v)
+                for k, v in headers.items()
+            }
+            self._log.json(f"HTTP {method} - Headers", safe_headers)
+            if body:
+                self._log.json(f"HTTP {method} - Payload", body)
+        except Exception:
+            pass
+
+    def _log_response_details(self, response: httpx.Response) -> None:
+        """Log response details for debugging."""
+        try:
+            if response.status_code == 200:
+                self._log.json("HTTP Response - Status", {"status": response.status_code})
+            else:
+                self._log.json("HTTP Response", response.json())
+        except Exception:
+            self._log.info(f"HTTP Response - Status {response.status_code}")
+
+    def cleanup(self) -> None:
+        """Clean up resources."""
+        try:
+            self._client.close()
+        except Exception:
+            pass
 
 
 class SimpleLLMClient(LLMClient):

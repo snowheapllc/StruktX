@@ -13,7 +13,6 @@ from .prompts import (
 from .toolkit import DeviceToolkit
 from .transport import (
     AWSSignedHttpTransport,
-    AwsSigV4Signer,
     DeviceTransport,
     RequestSigner,
 )
@@ -26,7 +25,6 @@ __all__ = [
     "ErrorInfo",
     "DeviceTransport",
     "RequestSigner",
-    "AwsSigV4Signer",
     "AWSSignedHttpTransport",
     "DeviceToolkit",
     "DeviceControlHandler",

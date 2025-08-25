@@ -9,8 +9,9 @@ from .config import (
     MiddlewareConfig,
     StruktConfig,
 )
-from .defaults import MemoryAugmentedLLMClient
+from .defaults import MemoryAugmentedLLMClient, AwsSigV4Signer
 from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
+from .secrets import AWSSecretsManager
 from .langchain_helpers import LangChainLLMClient
 from .logging import get_logger
 from .types import HandlerResult, InvocationState, QueryClassification, StruktResponse
@@ -36,4 +37,6 @@ __all__ = [
     "MemoryAugmentedLLMClient",
     "MiddlewareConfig",
     "get_logger",
+    "AwsSigV4Signer",
+    "AWSSecretsManager"
 ]

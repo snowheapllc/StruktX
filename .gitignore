@@ -9,3 +9,4 @@ full_example.py
 package-lock.json
 dist/
 RELEASE.md
+extensions/roomi/*

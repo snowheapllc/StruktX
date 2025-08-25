@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "struktx-ai"
-version = "0.0.1-beta1"
+version = "0.0.1-beta2"
 description = "A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory"
 readme = "README.md"
 license = {text = "MIT"}
@@ -39,6 +39,7 @@ dependencies = [
     "httpx>=0.28.1",
     "boto3>=1.37.38",
     "botocore>=1.37.38",
+    "inflect>=7.0.0",
 ]
 
 [project.optional-dependencies]
