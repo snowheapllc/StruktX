@@ -38,5 +38,5 @@ __all__ = [
     "MiddlewareConfig",
     "get_logger",
     "AwsSigV4Signer",
-    "AWSSecretsManager"
+    "AWSSecretsManager",
 ]

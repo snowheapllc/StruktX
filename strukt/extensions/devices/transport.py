@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-import json as _json
 from typing import (
     Any,
     Callable,
@@ -9,12 +8,10 @@ from typing import (
     List,
     Optional,
     Protocol,
-    runtime_checkable,
 )
 
 import httpx
 
-from strukt.logging import get_logger
 from strukt.defaults import BaseAWSTransport, RequestSigner
 
 from .models import DeviceCommand
@@ -64,11 +61,9 @@ class AWSSignedHttpTransport(BaseAWSTransport):
 
     def list_devices(self, *, user_id: str, unit_id: str) -> List[Dict[str, Any]]:
         """List devices for a user/unit."""
-        response = self._make_request(
-            method="GET", user_id=user_id, unit_id=unit_id
-        )
+        response = self._make_request(method="GET", user_id=user_id, unit_id=unit_id)
         data = response.json()
-        
+
         # Flexible response shape: prefer top-level 'devices', else passthrough list
         if isinstance(data, dict) and "devices" in data:
             return data["devices"]
@@ -90,7 +85,7 @@ class AWSSignedHttpTransport(BaseAWSTransport):
             }
             for c in commands
         ]
-        
+
         # Allow custom request shape via payload_builder; default to {user_id, unit_id, data: {devices}}
         if self._payload_builder is not None:
             try:
@@ -110,11 +105,11 @@ class AWSSignedHttpTransport(BaseAWSTransport):
                 "unit_id": unit_id,
                 "data": {"devices": device_list},
             }
-        
+
         self._make_request(
             method="POST", user_id=user_id, unit_id=unit_id, body=wrapped
         )
-        
+
         return {
             "status": "success",
             "message": f"Executed {len(device_list)} device command(s)",

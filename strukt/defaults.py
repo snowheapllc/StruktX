@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any, List, Type, Dict, Optional, Protocol, runtime_checkable
-from collections.abc import Iterable
 
 import httpx
 import json as _json
@@ -17,6 +16,7 @@ from .logging import get_logger
 
 class DateTimeEncoder(_json.JSONEncoder):
     """Custom JSON encoder that handles datetime objects."""
+
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -53,7 +53,7 @@ class AwsSigV4Signer:
         credentials = session.get_credentials()
         if not credentials:
             raise ValueError("No AWS credentials found for SigV4 signing")
-        
+
         # Create AWSRequest with headers that include the payload hash
         # The X-Amz-Content-Sha256 header should already be set by the transport
         request = AWSRequest(method=method, url=url, headers=headers)
@@ -63,7 +63,6 @@ class AwsSigV4Signer:
 
 class BaseAWSTransport:
     """Base AWS transport class that provides common AWS SigV4 functionality.
-    
     This class can be inherited by specific transport implementations that need
     AWS authentication and common HTTP operations.
     """
@@ -127,48 +126,58 @@ class BaseAWSTransport:
     ) -> httpx.Response:
         """Make a signed HTTP request to the AWS endpoint."""
         url = f"{self._base_url}{endpoint}"
-        
+
         # Prepare body
         body_bytes = None
         if body is not None:
-            body_str = _json.dumps(body, separators=(",", ":"), sort_keys=True, cls=DateTimeEncoder)
+            body_str = _json.dumps(
+                body, separators=(",", ":"), sort_keys=True, cls=DateTimeEncoder
+            )
             body_bytes = body_str.encode("utf-8")
-        
+
         # Get signed headers
         request_headers = self._signed_headers(
             method=method, url=url, user_id=user_id, unit_id=unit_id, body=body_bytes
         )
-        
+
         # Merge with additional headers
         if headers:
             request_headers.update(headers)
-        
+
         # Log request details if enabled
         if self._log_responses:
             self._log_request_details(method, url, request_headers, body)
-        
+
         # Make request
         if method.upper() == "GET":
             response = self._client.get(url, headers=request_headers)
         elif method.upper() == "POST":
-            response = self._client.post(url, headers=request_headers, content=body_bytes)
+            response = self._client.post(
+                url, headers=request_headers, content=body_bytes
+            )
         elif method.upper() == "PATCH":
-            response = self._client.patch(url, headers=request_headers, content=body_bytes)
+            response = self._client.patch(
+                url, headers=request_headers, content=body_bytes
+            )
         elif method.upper() == "DELETE":
             response = self._client.delete(url, headers=request_headers)
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
-        
+
         response.raise_for_status()
-        
+
         # Log response details if enabled
         if self._log_responses:
             self._log_response_details(response)
-        
+
         return response
 
     def _log_request_details(
-        self, method: str, url: str, headers: Dict[str, str], body: Optional[Dict[str, Any]]
+        self,
+        method: str,
+        url: str,
+        headers: Dict[str, str],
+        body: Optional[Dict[str, Any]],
     ) -> None:
         """Log request details for debugging."""
         try:
@@ -186,7 +195,9 @@ class BaseAWSTransport:
         """Log response details for debugging."""
         try:
             if response.status_code == 200:
-                self._log.json("HTTP Response - Status", {"status": response.status_code})
+                self._log.json(
+                    "HTTP Response - Status", {"status": response.status_code}
+                )
             else:
                 self._log.json("HTTP Response", response.json())
         except Exception:
