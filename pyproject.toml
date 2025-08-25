@@ -9,10 +9,10 @@ description = "A configurable, typed AI framework with swappable LLM, classifier
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "StruktX Team", email = "info@snowheap.com"}
+    {name = "Snowheap LLC", email = "info@snowheap.com"}
 ]
 maintainers = [
-    {name = "StruktX Team", email = "info@snowheap.com"}
+    {name = "Snowheap LLC", email = "info@snowheap.com"}
 ]
 keywords = ["ai", "llm", "framework", "chatbot", "nlp", "langchain"]
 classifiers = [

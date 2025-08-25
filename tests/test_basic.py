@@ -38,16 +38,16 @@ def test_package_imports():
     """Test that all main modules can be imported"""
     try:
         from strukt import (
-            ai, # noqa: F401
-            config, # noqa: F401
-            engine, # noqa: F401
-            interfaces, # noqa: F401
-            logging, # noqa: F401
-            memory, # noqa: F401
-            middleware, # noqa: F401
-            types, # noqa: F401
-            utils, # noqa: F401
-            secrets, # noqa: F401
+            ai,  # noqa: F401
+            config,  # noqa: F401
+            engine,  # noqa: F401
+            interfaces,  # noqa: F401
+            logging,  # noqa: F401
+            memory,  # noqa: F401
+            middleware,  # noqa: F401
+            types,  # noqa: F401
+            utils,  # noqa: F401
+            secrets,  # noqa: F401
         )
 
         assert True
