@@ -119,7 +119,7 @@ StruktX is a Python framework for building AI applications with focus on natural
 
 ## Requirements
 
-- Python 3.8.1+
+- Python 3.10+
 - Core: `pydantic>=2.0.0`, `python-dotenv>=1.0.0`
 - Optional: LangChain packages, vector stores, etc.
 
