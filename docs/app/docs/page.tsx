@@ -82,9 +82,14 @@ os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
 
 config = StruktConfig(
   llm=LLMClientConfig("langchain_openai:ChatOpenAI", dict(model="gpt-4o-mini")),
-  classifier=ClassifierConfig(factory=None),
+  classifier=ClassifierConfig("strukt.classifiers:LLMClassifier"),
   handlers=HandlersConfig(default_route="general"),
-  memory=MemoryConfig(factory=None, use_store=False, augment_llm=True),
+  memory=MemoryConfig(
+    factory="strukt.memory:UpstashVectorMemoryEngine",
+    params={"index_url": "...", "index_token": "...", "namespace": "app1"},
+    use_store=True,
+    augment_llm=True
+  ),
 )
 
 app = create(config)
@@ -133,14 +138,19 @@ print(res.response)
 
 config = StruktConfig(
   llm=LLMClientConfig(factory="langchain_openai:ChatOpenAI", params=dict(model="gpt-4o-mini")),
-  classifier=ClassifierConfig(factory=None),
+  classifier=ClassifierConfig(factory="strukt.classifiers:LLMClassifier"),
   handlers=HandlersConfig(
     registry={
       # "time_service": "your_pkg.handlers:TimeHandler",
     },
     default_route="general",
   ),
-  memory=MemoryConfig(factory=None, params={}, use_store=False, augment_llm=True),
+  memory=MemoryConfig(
+    factory="strukt.memory:UpstashVectorMemoryEngine",
+    params={"index_url": "...", "index_token": "...", "namespace": "app1"},
+    use_store=True,
+    augment_llm=True
+  ),
   middleware=[MiddlewareConfig(factory="strukt.logging:LoggingMiddleware", params=dict(verbose=True))],
 )
 
@@ -493,7 +503,12 @@ state.context['handler_intents']['maintenance_or_helpdesk'] = "status"  # ❌ Ru
         <CodeBlock className="code-block" language="python" filename="memory.py" showExample={true} code={`from strukt import StruktConfig, MemoryConfig
 
 cfg = StruktConfig(
-  memory=MemoryConfig(factory=None, use_store=False, augment_llm=True)
+  memory=MemoryConfig(
+    factory="strukt.memory:UpstashVectorMemoryEngine",
+    params={"index_url": "...", "index_token": "...", "namespace": "app1"},
+    use_store=True,
+    augment_llm=True
+  )
 )
 `} />
       </section>
