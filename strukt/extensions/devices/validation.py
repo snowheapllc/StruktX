@@ -75,7 +75,6 @@ class DeviceCommandValidator:
                             {
                                 "name": str(d.get("name")),
                                 "brand": str(d.get("brand")),
-                                "id": str(d.get("id")),
                                 "attr.identifier": str(
                                     attrs.get("identifier")
                                     if attrs.get("identifier") is not None
@@ -98,7 +97,6 @@ class DeviceCommandValidator:
                                 {
                                     "name": str(d.get("name")),
                                     "brand": str(d.get("brand")),
-                                    "id": str(d.get("id")),
                                     "attr.identifier": str(
                                         attrs.get("identifier")
                                         if attrs.get("identifier") is not None

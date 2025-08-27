@@ -14,7 +14,13 @@ from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
 from .secrets import AWSSecretsManager
 from .langchain_helpers import LangChainLLMClient
 from .logging import get_logger
-from .types import HandlerResult, InvocationState, QueryClassification, StruktResponse
+from .types import (
+    HandlerResult,
+    InvocationState,
+    QueryClassification,
+    StruktResponse,
+    BackgroundTaskInfo,
+)
 
 __all__ = [
     "create",
@@ -29,6 +35,7 @@ __all__ = [
     "InvocationState",
     "HandlerResult",
     "QueryClassification",
+    "BackgroundTaskInfo",
     "LLMClient",
     "Classifier",
     "Handler",

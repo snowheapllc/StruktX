@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Dict
+from typing import Dict, List, Optional
 
 from .config import MiddlewareConfig, StruktConfig, ensure_config_types
 from .defaults import (
@@ -16,7 +16,7 @@ from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
 from .langchain_helpers import adapt_to_llm_client
 from .memory import KnowledgeStore
 from .middleware import Middleware
-from .types import InvocationState, StruktQueryEnum, StruktResponse
+from .types import InvocationState, StruktQueryEnum, StruktResponse, BackgroundTaskInfo
 from .utils import coerce_factory, load_factory
 
 
@@ -74,6 +74,31 @@ class Strukt:
             except Exception:
                 return []
         return []
+
+    # --- Background task convenience helpers ---
+    def get_background_task_info(self, task_id: str) -> Optional[BackgroundTaskInfo]:
+        """Get information about a specific background task."""
+        return self._engine.get_background_task_info(task_id)
+
+    def get_all_background_tasks(self) -> List[BackgroundTaskInfo]:
+        """Get all background tasks."""
+        return self._engine.get_all_background_tasks()
+
+    def get_background_tasks_by_status(self, status: str) -> List[BackgroundTaskInfo]:
+        """Get background tasks filtered by status."""
+        return self._engine.get_background_tasks_by_status(status)
+
+    def get_running_background_tasks(self) -> List[BackgroundTaskInfo]:
+        """Get all currently running background tasks."""
+        return self._engine.get_running_background_tasks()
+
+    def get_completed_background_tasks(self) -> List[BackgroundTaskInfo]:
+        """Get all completed background tasks."""
+        return self._engine.get_completed_background_tasks()
+
+    def get_failed_background_tasks(self) -> List[BackgroundTaskInfo]:
+        """Get all failed background tasks."""
+        return self._engine.get_failed_background_tasks()
 
 
 def _build_llm(cfg: StruktConfig) -> LLMClient:

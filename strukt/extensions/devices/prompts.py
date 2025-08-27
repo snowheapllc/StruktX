@@ -189,9 +189,11 @@ def determine_device_providers(devices_list: List[Dict[str, Any]]) -> List[str]:
     """Extract unique provider/brand names from device list."""
     providers = set()
     for device in devices_list:
-        provider = device.get("brand", "lifesmart")
-        if isinstance(provider, str) and provider:
-            providers.add(provider.lower())
+        provider = device.get("brand")
+        # Handle None values and empty strings by defaulting to "lifesmart"
+        if provider is None or not isinstance(provider, str) or not provider.strip():
+            provider = "lifesmart"
+        providers.add(provider.lower())
     return list(providers)
 
 

@@ -243,6 +243,63 @@ config = StruktConfig(
 )
 ```
 
+### Available Middleware Types
+
+StruktX provides several built-in middleware types for common use cases:
+
+#### Background Task Middleware
+Execute handlers in background threads for improved user experience:
+
+```python
+from strukt.middleware import BackgroundTaskMiddleware
+
+middleware=[
+    MiddlewareConfig(BackgroundTaskMiddleware, dict(
+        max_workers=4,
+        enable_background_for={"device_control"},
+        action_based_background={
+            "maintenance_or_helpdesk": {"create"},
+        },
+        custom_messages={
+            "device_control": "Device control successful",
+        },
+    )),
+]
+```
+
+#### Logging Middleware
+Structured logging with Rich-powered console output:
+
+```python
+from strukt.middleware import LoggingMiddleware
+
+middleware=[
+    MiddlewareConfig(LoggingMiddleware, dict(verbose=True)),
+]
+```
+
+#### Response Cleaner Middleware
+Clean and format handler responses:
+
+```python
+from strukt.middleware import ResponseCleanerMiddleware
+
+middleware=[
+    MiddlewareConfig(ResponseCleanerMiddleware),
+]
+```
+
+#### Memory Extraction Middleware
+Automatically extract and store conversation facts:
+
+```python
+from strukt.memory.middleware import MemoryExtractionMiddleware
+
+middleware=[
+    MiddlewareConfig(MemoryExtractionMiddleware),
+]
+```
+
 ### Memory
 
 Enable scoped memory and automatic prompt augmentation.
@@ -614,6 +671,216 @@ for _ in range(5):
 - **Memory**: improves continuity and reduces repeated user input.
 - **Typed Extraction**: increases determinism for downstream consumers.
 
+## Background Task Middleware
+
+The Background Task Middleware provides advanced task management capabilities, allowing you to execute handlers in background threads and return immediate responses to users while processing continues asynchronously.
+
+### Features
+
+- **Immediate Response**: Return custom messages instantly while tasks run in background
+- **Action-Based Execution**: Configure which specific actions within handlers should run in background
+- **Task Tracking**: Monitor task progress, status, and results
+- **Parallel Execution**: Run multiple handlers concurrently
+- **Task Management**: Cancel, cleanup, and query background tasks
+
+### Configuration
+
+```python
+from strukt import StruktConfig, MiddlewareConfig
+from strukt.middleware import BackgroundTaskMiddleware
+
+config = StruktConfig(
+    # ... other config
+    middleware=[
+        MiddlewareConfig(BackgroundTaskMiddleware, dict(
+            max_workers=6,  # Number of concurrent background tasks
+            default_message="Your request is being processed.",
+            
+            # Always run these handlers in background
+            enable_background_for={"device_control"},
+            
+            # Run specific actions in background for specific handlers
+            action_based_background={
+                "maintenance_or_helpdesk": {"create"},  # Only "create" action
+                "some_handler": {"create", "update"},   # Multiple actions
+            },
+            
+            # Custom messages for different handlers
+            custom_messages={
+                "device_control": "Device control successful",
+                "maintenance_or_helpdesk": "I've created your helpdesk ticket. Someone will be in touch shortly.",
+            },
+        )),
+    ],
+)
+```
+
+### Action-Based Background Execution
+
+The middleware can intelligently determine when to run tasks in background based on the specific action being performed:
+
+```python
+# Configuration
+action_based_background={
+    "maintenance_or_helpdesk": {"create"},  # Only run "create" in background
+}
+
+# Behavior Examples:
+"create a ticket for broken AC" → Runs in background, returns immediately
+"check my ticket status" → Runs normally, waits for completion
+```
+
+### Handler Intents System
+
+The background task middleware uses a handler intents system to determine which actions should run in background. Handlers extract intents and store them in the context for the middleware to use.
+
+#### How Handler Intents Work
+
+1. **Intent Extraction**: Handlers extract the user's intent/action from the input
+2. **Context Storage**: Store the intent in `state.context['handler_intents'][handler_name] = action`
+3. **Middleware Decision**: Background task middleware checks if the action matches configured background rules
+4. **Background Execution**: If matched, the task runs in background with immediate response
+
+#### Handler Integration
+
+To enable action-based background execution, handlers should set the extracted action in the context:
+
+```python
+class MyHandler(Handler):
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        # Extract intent/action from user input
+        intent = self._extract_intent(parts)
+        
+        # Set the action in context for middleware to use
+        # The handler_intents dict is automatically initialized
+        state.context['handler_intents']['my_handler_name'] = intent.action
+        
+        # Handle based on action
+        if intent.action == "create":
+            return self._handle_create()
+        elif intent.action == "status":
+            return self._handle_status()
+```
+
+#### Example: Helpdesk Handler
+
+```python
+class HelpdeskHandler(Handler):
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        # Extract intent from user input using LLM
+        intent = self._extract_intent(full_request, user_id, unit_id)
+        
+        # Set the extracted action in context for middleware to use
+        state.context['handler_intents']['maintenance_or_helpdesk'] = intent.action
+        
+        # Handle based on action
+        if intent.action == "create":
+            return self._handle_create_ticket(intent, user_id, unit_id)
+        elif intent.action == "status":
+            return self._handle_status_check(intent, user_id, unit_id)
+```
+
+#### Configuration Mapping
+
+The middleware configuration maps to handler intents:
+
+```python
+# Configuration
+action_based_background={
+    "maintenance_or_helpdesk": {"create", "update"},  # These actions run in background
+    "device_control": {"turn_on", "turn_off"},        # These actions run in background
+}
+
+# Handler sets intent
+state.context['handler_intents']['maintenance_or_helpdesk'] = "create"  # ✅ Runs in background
+state.context['handler_intents']['maintenance_or_helpdesk'] = "status"  # ❌ Runs in foreground
+```
+
+### Task Management API
+
+The middleware provides comprehensive task management through the main `Strukt` instance:
+
+```python
+# Get all background tasks
+all_tasks = app.get_all_background_tasks()
+
+# Get tasks by status
+running_tasks = app.get_running_background_tasks()
+completed_tasks = app.get_completed_background_tasks()
+failed_tasks = app.get_failed_background_tasks()
+
+# Get specific task info
+task_info = app.get_background_task_info("task-id-123")
+
+# Get tasks filtered by status
+tasks = app.get_background_tasks_by_status("running")
+```
+
+### Task Information Structure
+
+Each task provides detailed information:
+
+```python
+{
+    'task_id': 'uuid-string',
+    'handler_name': 'device_control',
+    'handler_id': 'device_control',
+    'status': 'running',  # pending, running, completed, failed, cancelled
+    'progress': 0.75,     # 0.0 to 1.0
+    'created_at': '2024-01-01T12:00:00',
+    'started_at': '2024-01-01T12:00:01',
+    'completed_at': None,  # Set when task completes
+    'result': {...},       # HandlerResult when completed
+    'error': None,         # Error message if failed
+    'metadata': {...}      # Additional task metadata
+}
+```
+
+### Complete Example
+
+```python
+from strukt import create, StruktConfig, MiddlewareConfig
+from strukt.middleware import BackgroundTaskMiddleware
+
+# Configure with action-based background execution
+config = StruktConfig(
+    # ... other config
+    middleware=[
+        MiddlewareConfig(BackgroundTaskMiddleware, dict(
+            max_workers=4,
+            default_message="Processing your request...",
+            enable_background_for={"device_control"},
+            action_based_background={
+                "maintenance_or_helpdesk": {"create"},
+            },
+            custom_messages={
+                "device_control": "Device control successful",
+                "maintenance_or_helpdesk": "Ticket created successfully. You'll receive a confirmation shortly.",
+            },
+        )),
+    ],
+)
+
+app = create(config)
+
+# Execute requests
+result = app.invoke("turn on the bedroom lights", context={"user_id": "user1"})
+print(result.response)  # "Device control successful" (immediate)
+
+# Check background tasks
+running = app.get_running_background_tasks()
+for task in running:
+    print(f"Task {task['task_id'][:8]}... is {task['progress']*100:.1f}% complete")
+```
+
+### Best Practices
+
+1. **Use Action-Based Execution**: Configure specific actions rather than entire handlers when possible
+2. **Provide Clear Messages**: Give users immediate feedback about what's happening
+3. **Monitor Task Progress**: Use the task management API to track long-running operations
+4. **Handle Failures**: Check for failed tasks and provide appropriate error handling
+5. **Clean Up**: The middleware automatically cleans up old tasks, but you can customize the retention period
+
 ### Reference (Overview)
 
 - `strukt.create(config)`: builds the app with LLM, classifier, handlers, memory, middleware.
@@ -627,7 +894,9 @@ for _ in range(5):
 - `logging.get_logger`, `LoggingMiddleware`: structured, Rich-powered console logging.
 - `langchain_helpers.LangChainLLMClient`, `adapt_to_llm_client`, `create_structured_chain`.
 - `utils.load_factory`, `utils.coerce_factory`: resolve factories from strings/callables/classes/instances.
-- `types`: `InvocationState`, `QueryClassification`, `HandlerResult`, `StruktResponse`, `StruktQueryEnum`.
+- `types`: `InvocationState`, `QueryClassification`, `HandlerResult`, `StruktResponse`, `StruktQueryEnum`, `BackgroundTaskInfo`.
+- `middleware.BackgroundTaskMiddleware`: Background task management with action-based execution.
+- `Strukt.get_all_background_tasks()`, `Strukt.get_running_background_tasks()`, `Strukt.get_background_task_info()`: Task management methods.
 
 ### Best Practices
 
@@ -642,6 +911,14 @@ for _ in range(5):
 **How do I add a new query type?** Implement a handler and register it in `HandlersConfig.registry` and include it in the classifier config.
 
 **How is memory injected?** If `MemoryConfig.augment_llm=True`, `MemoryAugmentedLLMClient` retrieves relevant docs and prepends them to prompts.
+
+**When should I use background tasks?** Use background tasks for operations that take time (device control, ticket creation) while keeping quick operations (status checks, queries) synchronous for immediate responses.
+
+**How do I configure action-based background execution?** Use the `action_based_background` parameter to specify which actions within handlers should run in background, and ensure your handler sets `state.context['handler_intents'][handler_name] = action`.
+
+**Can I monitor background task progress?** Yes, use `app.get_all_background_tasks()`, `app.get_running_background_tasks()`, and other task management methods to monitor progress and status.
+
+**How do handler intents work?** Handlers extract intents and store them in `state.context['handler_intents'][handler_name] = action`. The background task middleware uses these intents to determine if a task should run in background based on the configured `action_based_background` rules.
 
 ## Extras
 

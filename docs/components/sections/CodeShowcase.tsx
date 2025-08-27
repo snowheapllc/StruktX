@@ -59,7 +59,7 @@ handlers = HandlersConfig(
 )`;
 
 const middlewareCode = `from strukt import MiddlewareConfig
-from strukt.examples.middleware import MemoryExtractionMiddleware
+from strukt.memory.middleware import MemoryExtractionMiddleware
 
 middleware = [
   MiddlewareConfig(MemoryExtractionMiddleware)

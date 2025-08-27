@@ -309,6 +309,183 @@ config = StruktConfig(
 `} />
       </section>
 
+      <section id="background-tasks" className="section">
+        <h3 className="text-xl font-semibold">Background Task Middleware</h3>
+        <p>Execute handlers in background threads for improved user experience with immediate responses and task tracking.</p>
+        
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">Immediate Response</span>
+            <span>Return custom messages instantly while tasks run in background.</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Action-Based</span>
+            <span>Configure which specific actions within handlers should run in background.</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Task Tracking</span>
+            <span>Monitor task progress, status, and results through the API.</span>
+          </div>
+        </div>
+
+        <h4 className="text-lg font-semibold mt-6">Configuration</h4>
+        <CodeBlock className="code-block" language="python" filename="background_tasks.py" showExample={true} code={`from strukt import StruktConfig, MiddlewareConfig
+from strukt.middleware import BackgroundTaskMiddleware
+
+config = StruktConfig(
+    # ... other config
+    middleware=[
+        MiddlewareConfig(BackgroundTaskMiddleware, dict(
+            max_workers=6,  # Number of concurrent background tasks
+            default_message="Your request is being processed.",
+            
+            # Always run these handlers in background
+            enable_background_for={"device_control"},
+            
+            # Run specific actions in background for specific handlers
+            action_based_background={
+                "maintenance_or_helpdesk": {"create"},  # Only "create" action
+                "some_handler": {"create", "update"},   # Multiple actions
+            },
+            
+            # Custom messages for different handlers
+            custom_messages={
+                "device_control": "Device control successful",
+                "maintenance_or_helpdesk": "I've created your helpdesk ticket. Someone will be in touch shortly.",
+            },
+        )),
+    ],
+)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Handler Integration</h4>
+        <p>To enable action-based background execution, handlers should set the extracted action in the context:</p>
+        <CodeBlock className="code-block" language="python" filename="handler_integration.py" showExample={true} code={`class MyHandler(Handler):
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        # Extract intent/action from user input
+        intent = self._extract_intent(parts)
+        
+        # Set the action in context for middleware to use
+        state.context['extracted_action'] = intent.action
+        
+        # Handle based on action
+        if intent.action == "create":
+            return self._handle_create()
+        elif intent.action == "status":
+            return self._handle_status()
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Task Management API</h4>
+        <CodeBlock className="code-block" language="python" filename="task_management.py" showExample={true} code={`# Get all background tasks
+all_tasks = app.get_all_background_tasks()
+
+# Get tasks by status
+running_tasks = app.get_running_background_tasks()
+completed_tasks = app.get_completed_background_tasks()
+failed_tasks = app.get_failed_background_tasks()
+
+# Get specific task info
+task_info = app.get_background_task_info("task-id-123")
+
+# Get tasks filtered by status
+tasks = app.get_background_tasks_by_status("running")
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Complete Example</h4>
+        <CodeBlock className="code-block" language="python" filename="complete_example.py" showExample={true} code={`from strukt import create, StruktConfig, MiddlewareConfig
+from strukt.middleware import BackgroundTaskMiddleware
+
+# Configure with action-based background execution
+config = StruktConfig(
+    # ... other config
+    middleware=[
+        MiddlewareConfig(BackgroundTaskMiddleware, dict(
+            max_workers=4,
+            default_message="Processing your request...",
+            enable_background_for={"device_control"},
+            action_based_background={
+                "maintenance_or_helpdesk": {"create"},
+            },
+            custom_messages={
+                "device_control": "Device control successful",
+                "maintenance_or_helpdesk": "Ticket created successfully. You'll receive a confirmation shortly.",
+            },
+        )),
+    ],
+)
+
+app = create(config)
+
+# Execute requests
+result = app.invoke("turn on the bedroom lights", context={"user_id": "user1"})
+print(result.response)  # "Device control successful" (immediate)
+
+# Check background tasks
+running = app.get_running_background_tasks()
+for task in running:
+    print(f"Task {task['task_id'][:8]}... is {task['progress']*100:.1f}% complete")
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Handler Intents System</h4>
+        <p>The background task middleware uses a handler intents system to determine which actions should run in background. Handlers extract intents and store them in the context for the middleware to use.</p>
+        
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">Intent Extraction</span>
+            <span>Handlers extract the user's intent/action from the input</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Context Storage</span>
+            <span>Store the intent in <code>state.context['handler_intents'][handler_name] = action</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Middleware Decision</span>
+            <span>Background task middleware checks if the action matches configured background rules</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Background Execution</span>
+            <span>If matched, the task runs in background with immediate response</span>
+          </div>
+        </div>
+
+        <h5 className="concept-badge-inline text-md font-semibold">Handler Integration</h5>
+        <CodeBlock className="code-block" language="python" filename="handler_intents_example.py" showExample={true} code={`class HelpdeskHandler(Handler):
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        # Extract intent from user input using LLM
+        intent = self._extract_intent(full_request, user_id, unit_id)
+        
+        # Set the extracted action in context for middleware to use
+        # The handler_intents dict is automatically initialized
+        state.context['handler_intents']['maintenance_or_helpdesk'] = intent.action
+        
+        # Handle based on action
+        if intent.action == "create":
+            return self._handle_create_ticket(intent, user_id, unit_id)
+        elif intent.action == "status":
+            return self._handle_status_check(intent, user_id, unit_id)
+`} />
+
+        <h5 className="concept-badge-inline text-md font-semibold">Configuration Mapping</h5>
+        <CodeBlock className="code-block" language="python" filename="config_mapping.py" showExample={true} code={`# Configuration
+action_based_background={
+    "maintenance_or_helpdesk": {"create", "update"},  # These actions run in background
+    "device_control": {"turn_on", "turn_off"},        # These actions run in background
+}
+
+# Handler sets intent
+state.context['handler_intents']['maintenance_or_helpdesk'] = "create"  # ✅ Runs in background
+state.context['handler_intents']['maintenance_or_helpdesk'] = "status"  # ❌ Runs in foreground
+`} />
+
+        <div className="note-box">
+          <span className="concept-badge">Note</span>
+          <div>
+            <p>The <code>handler_intents</code> dictionary is automatically initialized in <code>InvocationState</code>, so handlers don't need to check if it exists before setting values.</p>
+            <p>This system allows multiple handlers to set their intents independently, and the middleware can handle action-based background execution for each handler type.</p>
+          </div>
+        </div>
+      </section>
+
       <section id="memory" className="section">
         <h3 className="text-xl font-semibold">Memory</h3>
         <p>Enable scoped memory and automatic prompt augmentation.</p>
@@ -756,6 +933,8 @@ for _ in range(5):
         <p><b>Can I use non-LangChain LLMs?</b> Yes—implement <code>LLMClient</code> or provide an adapter.</p>
         <p><b>How do I add a new query type?</b> Implement a handler and register it in <code>HandlersConfig.registry</code> and include it in the classifier config.</p>
         <p><b>How is memory injected?</b> If <code>MemoryConfig.augment_llm=True</code>, <code>MemoryAugmentedLLMClient</code> retrieves relevant docs and prepends them to prompts.</p>
+        <p><b>How do handler intents work?</b> Handlers extract intents and store them in <code>state.context['handler_intents'][handler_name] = action</code>. The background task middleware uses these intents to determine if a task should run in background based on the configured <code>action_based_background</code> rules.</p>
+        <p><b>When should I use background tasks?</b> Use background tasks for operations that take time (device control, ticket creation) while keeping quick operations (status checks, queries) synchronous for immediate responses.</p>
       </section>
 
       <div className="section-header">
