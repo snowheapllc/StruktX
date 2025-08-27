@@ -43,12 +43,7 @@ jobs:
     - name: Install dependencies
       run: |
         uv pip install -e ".[dev]"
-        
-    - name: Check Black formatting
-      run: |
-        echo "Checking Black formatting for strukt folder..."
-        uv run black --check strukt/ --diff
-        echo "✅ Black formatting check passed"
+        uv pip install ruff
         
     - name: Check Ruff linting
       run: |

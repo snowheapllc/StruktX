@@ -245,11 +245,11 @@ class ResponseCleanerMiddleware(Middleware):
             # Numbers with country codes
             (
                 r"\+(\d{1,3})(\d{9,12})",
-                lambda m: f"plus {pronounce_digits(m.group(1))}, {', '.join([pronounce_digits(m.group(2)[i:i+3]) for i in range(0, len(m.group(2)), 3)])}",
+                lambda m: f"plus {pronounce_digits(m.group(1))}, {', '.join([pronounce_digits(m.group(2)[i : i + 3]) for i in range(0, len(m.group(2)), 3)])}",
             ),
             (
                 r"00(\d{1,3})(\d{9,12})",
-                lambda m: f"zero zero {pronounce_digits(m.group(1))}, {', '.join([pronounce_digits(m.group(2)[i:i+3]) for i in range(0, len(m.group(2)), 3)])}",
+                lambda m: f"zero zero {pronounce_digits(m.group(1))}, {', '.join([pronounce_digits(m.group(2)[i : i + 3]) for i in range(0, len(m.group(2)), 3)])}",
             ),
         ]
 
