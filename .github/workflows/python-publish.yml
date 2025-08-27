@@ -63,9 +63,24 @@ jobs:
           echo "Retrieved distributions:"
           ls -la dist/
 
+      - name: Debug PyPI credentials
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          echo "Checking if PYPI_API_TOKEN is set..."
+          if [ -n "$PYPI_TOKEN" ]; then
+            echo "✅ PYPI_API_TOKEN is set (length: ${#PYPI_TOKEN})"
+            echo "Token starts with: ${PYPI_TOKEN:0:10}..."
+          else
+            echo "❌ PYPI_API_TOKEN is not set"
+          fi
+          
       - name: Publish release distributions to PyPI
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          password: ${{ env.PYPI_TOKEN }}
           username: __token__
+          verbose: true
