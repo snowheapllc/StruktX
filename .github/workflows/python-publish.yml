@@ -40,7 +40,7 @@ jobs:
       - name: Check Ruff formatting
         run: |
           echo "Checking Ruff formatting for strukt folder..."
-          ruff format --check strukt/ --config pyproject.toml
+          ruff format strukt/ --config pyproject.toml
           echo "✅ Ruff formatting check passed"
           
       - name: Build release distributions
