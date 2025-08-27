@@ -10,7 +10,8 @@ name: Upload Python Package
 
 on:
   release:
-    types: [published]
+    types: [published, created]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,6 +32,8 @@ jobs:
           # NOTE: put your own distribution build steps here.
           python -m pip install build
           python -m build
+          echo "Built distributions:"
+          ls -la dist/
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -46,16 +49,7 @@ jobs:
       # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
 
-    # Dedicated environments with protections for publishing are strongly recommended.
-    # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
-    environment:
-      name: pypi
-      # OPTIONAL: uncomment and update to include your PyPI project URL in the deployment status:
-      url: https://pypi.org/p/struktx-ai/
-      #
-      # ALTERNATIVE: if your GitHub Release name is the PyPI project version string
-      # ALTERNATIVE: exactly, uncomment the following line instead:
-      # url: https://pypi.org/project/YOURPROJECT/${{ github.event.release.name }}
+    # Using PYPI_API_TOKEN for deployment to snowheapllc/struktx-ai
 
     steps:
       - name: Retrieve release distributions
@@ -63,8 +57,15 @@ jobs:
         with:
           name: release-dists
           path: dist/
+          
+      - name: Debug distributions
+        run: |
+          echo "Retrieved distributions:"
+          ls -la dist/
 
       - name: Publish release distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          username: __token__
