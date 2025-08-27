@@ -1,0 +1,100 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'strukt/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - '.github/workflows/**'
+
+jobs:
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: "latest"
+        
+    - name: Create virtual environment
+      run: uv venv
+        
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          .uv/cache
+        key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-uv-
+          
+    - name: Install dependencies
+      run: |
+        uv pip install -e ".[dev]"
+        
+    - name: Check Black formatting
+      run: |
+        echo "Checking Black formatting for strukt folder..."
+        uv run black --check strukt/ --diff
+        echo "✅ Black formatting check passed"
+        
+    - name: Check Ruff linting
+      run: |
+        echo "Checking Ruff linting for strukt folder..."
+        uv run ruff check strukt/ --config pyproject.toml
+        echo "✅ Ruff linting check passed"
+        
+    - name: Check Ruff formatting
+      run: |
+        echo "Checking Ruff formatting for strukt folder..."
+        uv run ruff format --check strukt/ --config pyproject.toml
+        echo "✅ Ruff formatting check passed"
+        
+    - name: Run tests
+      run: |
+        echo "Running tests..."
+        uv run pytest tests/ -v
+        echo "✅ Tests passed"
+
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: "latest"
+        
+    - name: Create virtual environment
+      run: uv venv
+        
+    - name: Install dependencies
+      run: |
+        uv pip install -e ".[dev]"
+        
+    - name: Run security checks
+      run: |
+        echo "Running security checks..."
+        uv run bandit -r strukt/ -f json -o bandit-report.json || true
+        echo "✅ Security checks completed"

@@ -12,3 +12,4 @@ RELEASE.md
 extensions/roomi/*
 .pytest_cache/
 .mypy_cache/
+scripts/
