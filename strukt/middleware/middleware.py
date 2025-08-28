@@ -144,6 +144,22 @@ def apply_get_background_message(
     return "Task started in background. Use task tracking to monitor progress."
 
 
+def apply_get_return_query_type(
+    middleware: List[Middleware],
+    state: InvocationState,
+    query_type: str,
+    parts: List[str],
+) -> str:
+    """Get return query type from the first middleware that wants background execution."""
+    for m in middleware:
+        if m.should_run_background(state, query_type, parts):
+            if hasattr(m, "get_return_query_type"):
+                return m.get_return_query_type(state, query_type, parts)
+            # Fallback to original query type if middleware doesn't support custom return types
+            return query_type
+    return query_type
+
+
 def apply_get_background_task_info(
     middleware: List[Middleware],
     task_id: str,

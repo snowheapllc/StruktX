@@ -9,6 +9,7 @@ from .middleware import (
     apply_get_background_task_info,
     apply_get_all_background_tasks,
     apply_get_background_tasks_by_status,
+    apply_get_return_query_type,
 )
 from .response_cleaner import ResponseCleanerMiddleware
 from .background_tasks import BackgroundTaskMiddleware
@@ -27,6 +28,7 @@ __all__ = [
     "apply_before_handle",
     "apply_should_run_background",
     "apply_get_background_message",
+    "apply_get_return_query_type",
     "apply_get_background_task_info",
     "apply_get_all_background_tasks",
     "apply_get_background_tasks_by_status",

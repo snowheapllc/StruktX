@@ -13,6 +13,7 @@ from .middleware import (
     apply_before_handle,
     apply_should_run_background,
     apply_get_background_message,
+    apply_get_return_query_type,
     apply_get_background_task_info,
     apply_get_all_background_tasks,
     apply_get_background_tasks_by_status,
@@ -102,12 +103,17 @@ class Engine:
                     self._middleware, state, qtype, parts
                 )
 
+                # Get custom return query type from middleware
+                return_query_type = apply_get_return_query_type(
+                    self._middleware, state, qtype, parts
+                )
+
                 # Create background task and return immediate response
                 task_id = self._create_background_task(handler, state, qtype, parts)
                 results.append(
                     HandlerResult(
                         response=background_message,
-                        status=f"background_task_created:{task_id}",
+                        status=return_query_type,
                     )
                 )
             else:

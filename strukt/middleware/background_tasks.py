@@ -58,6 +58,7 @@ class BackgroundTaskMiddleware(Middleware):
         disable_background_for: Optional[Set[str]] = None,
         custom_messages: Optional[Dict[str, str]] = None,
         action_based_background: Optional[Dict[str, Set[str]]] = None,
+        return_query_types: Optional[Dict[str, str]] = None,
     ):
         self._log = get_logger("background_task_manager")
         self.max_workers = max_workers
@@ -66,6 +67,7 @@ class BackgroundTaskMiddleware(Middleware):
         self.disable_background_for = disable_background_for or set()
         self.custom_messages = custom_messages or {}
         self.action_based_background = action_based_background or {}
+        self.return_query_types = return_query_types or {}
 
         # Task management
         self._tasks: Dict[str, BackgroundTask] = {}
@@ -103,6 +105,35 @@ class BackgroundTaskMiddleware(Middleware):
             return background_message
 
         return self._get_background_message(query_type, parts)
+
+    def get_return_query_type(
+        self,
+        state: InvocationState,
+        query_type: str,
+        parts: List[str],
+    ) -> str:
+        """Get the query type to return when running in background."""
+        # Check if handler specified a return query type in context
+        handler_return_query_type = state.context.get("return_query_type", None)
+        if handler_return_query_type:
+            self._log.debug(
+                f"[BACKGROUND TASK] Handler specified return query type: {handler_return_query_type}"
+            )
+            return handler_return_query_type
+
+        # Check if there's a configured return query type for this handler
+        if query_type in self.return_query_types:
+            configured_return_type = self.return_query_types[query_type]
+            self._log.debug(
+                f"[BACKGROUND TASK] Using configured return query type for '{query_type}': {configured_return_type}"
+            )
+            return configured_return_type
+
+        # Fallback to the original query type
+        self._log.debug(
+            f"[BACKGROUND TASK] Using original query type as return type: {query_type}"
+        )
+        return query_type
 
     def _should_run_background(
         self, query_type: str, parts: List[str], state: InvocationState
