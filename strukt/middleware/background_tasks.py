@@ -114,6 +114,16 @@ class BackgroundTaskMiddleware(Middleware):
     ) -> str:
         """Get the query type to return when running in background."""
         # Check if handler specified a return query type in context
+        # Support both dict format (handler_name: query_type) and single value for backward compatibility
+        return_query_types = state.context.get("return_query_types", {})
+        if isinstance(return_query_types, dict) and query_type in return_query_types:
+            handler_return_query_type = return_query_types[query_type]
+            self._log.debug(
+                f"[BACKGROUND TASK] Handler specified return query type for '{query_type}': {handler_return_query_type}"
+            )
+            return handler_return_query_type
+
+        # Fallback to single return_query_type for backward compatibility
         handler_return_query_type = state.context.get("return_query_type", None)
         if handler_return_query_type:
             self._log.debug(

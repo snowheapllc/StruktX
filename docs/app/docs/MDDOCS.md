@@ -500,7 +500,7 @@ resp = app.invoke("recommend lunch", context={"user_id": "u1"})
 # or: llm.invoke(prompt, query_hint="recommendation")
 ```
 
-### augment_source
+### Augment Source
 
 Provide `augment_source` when calling an LLM client to label memory injection source in logs.
 
@@ -724,6 +724,12 @@ config = StruktConfig(
                 "device_control": "Device control successful",
                 "maintenance_or_helpdesk": "I've created your helpdesk ticket. Someone will be in touch shortly.",
             },
+            
+            # Custom return query types for different handlers
+            return_query_types={
+                "device_control": "DEVICE_CONTROL_SUCCESS",
+                "maintenance_or_helpdesk": "HELPDESK_TICKET_CREATED",
+            },
         )),
     ],
 )
@@ -732,6 +738,102 @@ config = StruktConfig(
 ### Action-Based Background Execution
 
 The middleware can intelligently determine when to run tasks in background based on the specific action being performed:
+
+### Custom Return Query Types
+
+The middleware supports custom return query types, allowing handlers to specify what query type should be returned in the response instead of the generic "background_task_created:..." format. This is useful for maintaining consistent API responses and providing meaningful status information to clients.
+
+#### Configuration
+
+```python
+# Configure custom return query types
+return_query_types={
+    "device_control": "DEVICE_CONTROL_SUCCESS",
+    "maintenance_or_helpdesk": "HELPDESK_TICKET_CREATED",
+}
+```
+
+#### Handler Integration
+
+Handlers can also specify return query types dynamically by setting them in the context. Since multiple handlers may run simultaneously, use a dictionary format where the key is the handler name and the value is the return query type:
+
+```python
+class MyHandler(Handler):
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        # Set custom return query type for this specific request
+        # Use dictionary format to support multiple handlers
+        state.context['return_query_types'] = {
+            'my_handler_name': "CUSTOM_SUCCESS_STATUS"
+        }
+        
+        # ... rest of handler logic
+```
+
+**Note**: For backward compatibility, the old single `return_query_type` format is still supported, but the dictionary format is recommended when multiple handlers are involved.
+
+#### Multiple Handler Example
+
+When multiple handlers are involved in a single request, each can specify its own return query type:
+
+```python
+class DeviceHandler(Handler):
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        # Set return query type for this handler
+        if 'return_query_types' not in state.context:
+            state.context['return_query_types'] = {}
+        state.context['return_query_types']['device_control'] = "DEVICE_CONTROL_SUCCESS"
+        
+        # ... handler logic
+        return HandlerResult(response="Device control initiated", status="device_control")
+
+class NotificationHandler(Handler):
+    def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        # Set return query type for this handler
+        if 'return_query_types' not in state.context:
+            state.context['return_query_types'] = {}
+        state.context['return_query_types']['notification'] = "NOTIFICATION_SENT"
+        
+        # ... handler logic
+        return HandlerResult(response="Notification sent", status="notification")
+```
+
+This approach ensures that each handler can specify its own meaningful return query type while maintaining backward compatibility.
+
+#### Response Format
+
+With custom return query types, the response will look like:
+
+```json
+{
+    "response": "Device control successful",
+    "background_tasks": [],
+    "query_type": "DEVICE_CONTROL_SUCCESS",
+    "query_types": [
+        "DEVICE_CONTROL_SUCCESS"
+    ],
+    "transcript_parts": [
+        "Turn on the kitchen AC",
+        "Set temperature to 25 degrees"
+    ]
+}
+```
+
+Instead of the generic format:
+
+```json
+{
+    "response": "Device control successful",
+    "background_tasks": [],
+    "query_type": "background_task_created:9541dc3f-cf4b-4257-a3e6-9d08ca77f702",
+    "query_types": [
+        "background_task_created:9541dc3f-cf4b-4257-a3e6-9d08ca77f702"
+    ],
+    "transcript_parts": [
+        "Turn on the kitchen AC",
+        "Set temperature to 25 degrees"
+    ]
+}
+```
 
 ```python
 # Configuration

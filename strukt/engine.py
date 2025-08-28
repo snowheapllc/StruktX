@@ -112,7 +112,7 @@ class Engine:
                 task_id = self._create_background_task(handler, state, qtype, parts)
                 results.append(
                     HandlerResult(
-                        response=background_message,
+                        response=background_message + f" (Task ID: {task_id})",
                         status=return_query_type,
                     )
                 )

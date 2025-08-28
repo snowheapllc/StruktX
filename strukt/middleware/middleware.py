@@ -61,9 +61,7 @@ class Middleware(ABC):
         """Get the message to return immediately when running in background."""
         return "Task started in background. Use task tracking to monitor progress."
 
-    def get_background_task_info(
-        self, task_id: str
-    ) -> Optional[BackgroundTaskInfo]:  # noqa: D401
+    def get_background_task_info(self, task_id: str) -> Optional[BackgroundTaskInfo]:  # noqa: D401
         """Get information about a specific background task."""
         return None
 
@@ -71,9 +69,7 @@ class Middleware(ABC):
         """Get all background tasks."""
         return []
 
-    def get_background_tasks_by_status(
-        self, status: str
-    ) -> List[BackgroundTaskInfo]:  # noqa: D401
+    def get_background_tasks_by_status(self, status: str) -> List[BackgroundTaskInfo]:  # noqa: D401
         """Get background tasks filtered by status."""
         return []
 

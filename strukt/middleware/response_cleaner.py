@@ -198,7 +198,9 @@ class ResponseCleanerMiddleware(Middleware):
                     (
                         self._number_to_words(int(d))
                         if d.isdigit()
-                        else "plus" if d == "+" else d
+                        else "plus"
+                        if d == "+"
+                        else d
                     )
                     for d in digits
                 ]
