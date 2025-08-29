@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "struktx-ai"
-version = "0.0.2-beta1"
+version = "0.0.2-beta2"
 description = "A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory"
 readme = "README.md"
 license = {text = "MIT"}
@@ -54,7 +54,6 @@ llm = [
 vector = [
     "upstash-vector>=0.1.0",
     "chromadb>=0.5.0",
-    "sentence-transformers>=2.7.0",
 ]
 
 # Development dependencies
@@ -80,7 +79,6 @@ all = [
     "langchain-community>=0.2.0",
     "upstash-vector>=0.1.0",
     "chromadb>=0.5.0",
-    "sentence-transformers>=2.7.0",
 ]
 
 
