@@ -331,7 +331,39 @@ cfg = StruktConfig(
 
 Expose StruktX handlers as MCP tools over HTTP.
 
-#### Configuration
+#### Auto-discovery (recommended)
+
+Handlers that define `mcp_*` methods are automatically exposed as MCP tools. Tool names are generated as `<handler_key>_<method_suffix>`, descriptions default to the method docstring, and the input schema is inferred from type hints (including `Optional`, `list`, `dict`).
+
+```python
+from strukt import StruktConfig
+
+config = StruktConfig(
+  mcp=dict(
+    enabled=True,
+    server_name="struktmcp",
+    include_handlers=[
+      "device_control","amenity_service","maintenance_or_helpdesk",
+      "bill_service","event_service","weather_service","schedule_future_event"
+    ],
+    default_consent_policy="ask-once",
+    # Optional overlays (no method_name): tweak descriptions/prompts for auto tools
+    tools={
+      "device_control": [
+        dict(
+          name="device_control_execute",  # auto from handler "device_control" + mcp_execute
+          description="Execute device commands",
+          usage_prompt="Call device_control_list first. Use attributes.identifier as deviceId; see provider rules.",
+        )
+      ]
+    }
+  )
+)
+```
+
+> Tip: Prefer docstrings on your `mcp_*` methods to provide LLM-facing descriptions. Use overlay entries (only `name`, `description`, `usage_prompt`) to override text while keeping schema/dispatch auto-generated.
+
+#### Explicit tool mapping (advanced)
 
 ```python
 from strukt import StruktConfig
@@ -416,7 +448,7 @@ curl -X POST -H "Content-Type: application/json" -H "x-api-key: dev-key" \
 
 #### Extending Handlers for MCP
 
-Add `mcp_*` methods to handlers for precise tool entrypoints, then reference them via `method_name` in the MCP config.
+Add `mcp_*` methods to handlers for precise tool entrypoints. Descriptions default to the method docstring; input schemas are inferred from type hints.
 
 ```python
 from strukt.interfaces import Handler, LLMClient
@@ -433,37 +465,24 @@ class MyHandler(Handler):
 
     # MCP tool entrypoints (keyword-only args)
     def mcp_list(self, *, user_id: str, unit_id: str):
+        """List items for a given user and unit."""
         return self.toolkit.list(user_id, unit_id)
 
     def mcp_create(self, *, user_id: str, unit_id: str, payload: dict):
+        """Create an item with the provided payload."""
         return self.toolkit.create(user_id=user_id, unit_id=unit_id, payload=payload)
 ```
 
-Map the methods in the MCP config:
+Map methods explicitly if needed, or use overlays to override only text:
 
 ```python
 mcp=dict(
   tools={
     "my_service": [
       dict(
-        name="my_list",
-        description="List items",
-        method_name="mcp_list",
-        parameters_schema={
-          "type": "object",
-          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}},
-          "required": ["user_id","unit_id"]
-        },
-      ),
-      dict(
-        name="my_create",
-        description="Create item",
-        method_name="mcp_create",
-        parameters_schema={
-          "type":"object",
-          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}, "payload": {"type":"object"}},
-          "required": ["user_id","unit_id","payload"]
-        },
+        name="my_service_list",             # auto from handler "my_service" + mcp_list
+        description="Custom list description",  # override docstring only
+        # no method_name → overlay only
       )
     ]
   }
@@ -485,9 +504,9 @@ You can also point `method_name` at toolkit methods using dotted paths (e.g., `"
 ```python
 dict(
   name="tool_name",                    # required
-  description="what it does",          # required
-  parameters_schema={...},              # JSON Schema for args
-  method_name="mcp_list",              # dotted path to callable on handler
+  description="what it does",          # optional for overlays; defaults to docstring
+  parameters_schema={...},              # optional; inferred from type hints when omitted
+  method_name="mcp_list",              # optional; dotted path for explicit mapping
   required_scopes=["scope:read"],      # optional OAuth scopes metadata
   consent_policy="ask-once",           # optional per-tool consent override
   usage_prompt="LLM guidance...",      # optional extra prompt appended to description
@@ -540,7 +559,6 @@ from strukt import HandlersConfig, LLMClientConfig, ClassifierConfig, Middleware
 
 cfg = StruktConfig(
   llm=LLMClientConfig("langchain_openai:ChatOpenAI", dict(model="gpt-4o-mini")),
-  classifier=ClassifierConfig("strukt.classifiers:LLMClassifier"),
   handlers=HandlersConfig(default_route="general"),
   memory=MemoryConfig(
     factory="strukt.memory:UpstashVectorMemoryEngine",
@@ -742,6 +760,7 @@ Use `llm.structured` to reliably extract fields into `WeatherQuery`, then call a
 from strukt.interfaces import Handler, LLMClient
 from strukt.types import InvocationState, HandlerResult
 from step_01_models import WeatherQuery
+
 
 def get_weather(city: str, unit: str | None = "celsius") -> str:
     unit_symbol = "°C" if (unit or "celsius").lower().startswith("c") else "°F"
@@ -1198,10 +1217,6 @@ for task in running:
 **How is memory injected?** If `MemoryConfig.augment_llm=True`, `MemoryAugmentedLLMClient` retrieves relevant docs and prepends them to prompts.
 
 **When should I use background tasks?** Use background tasks for operations that take time (device control, ticket creation) while keeping quick operations (status checks, queries) synchronous for immediate responses.
-
-**How do I configure action-based background execution?** Use the `action_based_background` parameter to specify which actions within handlers should run in background, and ensure your handler sets `state.context['handler_intents'][handler_name] = action`.
-
-**Can I monitor background task progress?** Yes, use `app.get_all_background_tasks()`, `app.get_running_background_tasks()`, and other task management methods to monitor progress and status.
 
 **How do handler intents work?** Handlers extract intents and store them in `state.context['handler_intents'][handler_name] = action`. The background task middleware uses these intents to determine if a task should run in background based on the configured `action_based_background` rules.
 

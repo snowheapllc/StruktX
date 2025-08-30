@@ -612,7 +612,40 @@ cfg = StruktConfig(
         <h3 className="text-xl font-semibold">MCP Server</h3>
         <p>Expose StruktX handlers as MCP tools over HTTP. Configure tools, auth, and consent, then serve via FastAPI.</p>
 
-        <h4 className="text-lg font-semibold">Configuration</h4>
+        <h4 className="text-lg font-semibold">Auto-discovery (recommended)</h4>
+        <p>
+          Handlers that define <code>mcp_*</code> methods are automatically exposed as MCP tools. Tool names are generated as <code>{`<handler_key>_<method_suffix>`}</code>, descriptions default to the method docstring, and the input schema is inferred from type hints (including <code>Optional</code>, <code>list</code>, <code>dict</code>). Add precise type hints on parameters for best schemas.
+        </p>
+        <CodeBlock className="code-block" language="python" filename="mcp_auto_config.py" showExample={true} code={`from strukt import StruktConfig
+
+config = StruktConfig(
+  # ... llm, handlers, etc.
+  mcp=dict(
+    enabled=True,
+    server_name="struktmcp",
+    include_handlers=["device_control","amenity_service","maintenance_or_helpdesk","bill_service","event_service","weather_service","schedule_future_event"],
+    default_consent_policy="ask-once",
+    # Optional overlays (no method_name): tweak descriptions/prompts for auto tools
+    tools={
+      "device_control": [
+        dict(
+          name="device_control_execute",  # auto from handler "device_control" + mcp_execute
+          description="Execute device commands",
+          usage_prompt="Call device_control_list first. Use attributes.identifier as deviceId; see provider rules.",
+        )
+      ]
+    }
+  )
+)
+`} />
+        <div className="note-box">
+          <span className="concept-badge">Tip</span>
+          <div>
+            <p>Descriptions come from <code>mcp_*</code> docstrings by default. You can override per tool via an overlay entry (without <code>method_name</code>) to keep everything else auto-generated.</p>
+          </div>
+        </div>
+
+        <h4 className="text-lg font-semibold">Explicit tool mapping (advanced)</h4>
         <CodeBlock className="code-block" language="python" filename="mcp_config.py" showExample={true} code={`from strukt import StruktConfig
 
 config = StruktConfig(
@@ -677,7 +710,7 @@ curl -X POST -H "Content-Type: application/json" -H "x-api-key: dev-key" \
 
       <section id="mcp-extending-handlers" className="section">
         <h3 className="text-xl font-semibold">Extending Handlers for MCP</h3>
-        <p>Add <code>mcp_*</code> methods to your handlers for precise, typed tool entrypoints. Reference them via <code>method_name</code> in the MCP config.</p>
+        <p>Add <code>mcp_*</code> methods to your handlers for precise, typed tool entrypoints. Descriptions default to the method docstring, and input schemas are inferred from type hints.</p>
         <CodeBlock className="code-block" language="python" filename="handler_mcp.py" showExample={true} code={`from strukt.interfaces import Handler, LLMClient
 from strukt.types import InvocationState, HandlerResult
 
@@ -690,44 +723,30 @@ class MyHandler(Handler):
     def handle(self, state: InvocationState, parts: list[str]) -> HandlerResult:
         ...
 
-    # MCP tool entrypoints (keyword-only args)
+    # MCP tool entrypoints (keyword-only args, add type hints for schema)
     def mcp_list(self, *, user_id: str, unit_id: str):
+        """List items for a given user and unit."""
         return self.toolkit.list(user_id, unit_id)
 
     def mcp_create(self, *, user_id: str, unit_id: str, payload: dict):
+        """Create an item with the provided payload."""
         return self.toolkit.create(user_id=user_id, unit_id=unit_id, payload=payload)
 `} />
-        <p>In your MCP config, set <code>method_name</code> to call these methods:</p>
-        <CodeBlock className="code-block" language="python" filename="mcp_method_map.py" showExample={true} code={`mcp=dict(
+        <p>You can still map methods explicitly via <code>method_name</code>, but overlays let you keep auto-discovery and only change text:</p>
+        <CodeBlock className="code-block" language="python" filename="mcp_overlay.py" showExample={true} code={`mcp=dict(
   tools={
     "my_service": [
       dict(
-        name="my_list",
-        description="List items",
-        method_name="mcp_list",
-        parameters_schema={
-          "type": "object",
-          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}},
-          "required": ["user_id","unit_id"]
-        },
-      ),
-      dict(
-        name="my_create",
-        description="Create item",
-        method_name="mcp_create",
-        parameters_schema={
-          "type":"object",
-          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}, "payload": {"type":"object"}},
-          "required": ["user_id","unit_id","payload"]
-        },
+        name="my_service_list",             # auto from handler "my_service" + mcp_list
+        description="Custom list description",  # override docstring
+        # no method_name → overlay only
       )
     ]
   }
 )
 `} />
         <p>
-          You can also point <code>method_name</code> at toolkit methods using dotted paths, e.g. <code>"toolkit.book_amenity_data"</code>.
-          Dotted resolution supports <code>toolkit.*</code> and <code>_toolkit.*</code>.
+          Dotted <code>method_name</code> resolution also supports <code>toolkit.*</code> and <code>_toolkit.*</code> when you need to call directly into toolkits.
         </p>
       </section>
 
@@ -745,9 +764,9 @@ class MyHandler(Handler):
         <CodeBlock className="code-block" language="python" filename="mcp_tool_config.py" showExample={true} code={`# Per tool (MCPToolConfig)
 dict(
   name="tool_name",                    # required
-  description="what it does",          # required
-  parameters_schema={...},              # JSON Schema for args
-  method_name="mcp_list",              # dotted path to callable on handler
+  description="what it does",          # optional for overlays; defaults to docstring
+  parameters_schema={...},              # optional; inferred from type hints when omitted
+  method_name="mcp_list",              # optional; use for explicit mapping only
   required_scopes=["scope:read"],      # optional OAuth scopes metadata
   consent_policy="ask-once",           # optional per-tool consent override
   usage_prompt="LLM guidance...",      # optional extra prompt appended to description
@@ -1019,6 +1038,7 @@ class TimeHandler(Handler):
 from strukt.types import InvocationState, HandlerResult
 from step_01_models import WeatherQuery
 
+
 def get_weather(city: str, unit: str | None = "celsius") -> str:
     unit_symbol = "°C" if (unit or "celsius").lower().startswith("c") else "°F"
     return f"22{unit_symbol} and clear in {city}"
@@ -1067,7 +1087,7 @@ class RateLimitMiddleware(Middleware):
           <h4 className="text-lg font-semibold m-0">Enable Memory</h4>
         </div>
         <div className="step-content">
-          <p>Enable <code>MemoryExtractionMiddleware</code> and a vector store to persist durable facts. StruktX will auto-inject them via <code>MemoryAugmentedLLMClient</code> during LLM calls. <br/><br/>Use <code>MemoryConfig.use_store=True</code> and <code>MemoryConfig.augment_llm=True</code> to enable a <code>KnowledgeStore</code> to further scope memory.</p>
+          <p>Enable <code>MemoryExtractionMiddleware</code> and a vector store to persist durable facts. StruktX will auto-inject them via <code>MemoryAuguatedLLMClient</code> during LLM calls. <br/><br/>Use <code>MemoryConfig.use_store=True</code> and <code>MemoryConfig.augment_llm=True</code> to enable a <code>KnowledgeStore</code> to further scope memory.</p>
           <div className="note-box">
             <span className="concept-badge">Note</span>
             <div>
