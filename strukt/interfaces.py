@@ -54,3 +54,24 @@ class MemoryEngine(ABC):
 
     @abstractmethod
     def cleanup(self, **kwargs: Any) -> Dict[str, Any]: ...
+
+
+@runtime_checkable
+class MCPExposable(Protocol):
+    """Optional protocol for handlers that want to customize MCP exposure.
+
+    Handlers may implement these attributes/methods to provide rich MCP tool
+    metadata and a callable entrypoint.
+    """
+
+    # Human-friendly description for the MCP tool
+    mcp_description: str  # type: ignore[assignment]
+    # JSON Schema for input parameters
+    mcp_parameters_schema: Dict[str, Any]  # type: ignore[assignment]
+    # OAuth/OIDC scope names required to execute this tool
+    mcp_required_scopes: List[str]  # type: ignore[assignment]
+    # Consent policy string (always-ask, ask-once, always-allow, never-allow)
+    mcp_consent_policy: str  # type: ignore[assignment]
+
+    # The callable to execute when the tool is invoked by the MCP host
+    def mcp_handle(self, **kwargs: Any) -> Any: ...

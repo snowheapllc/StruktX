@@ -608,6 +608,154 @@ cfg = StruktConfig(
         <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-white dark:from-blue-400 dark:to-white">Ecosystem</h2>
       </div>
 
+      <section id="mcp" className="section">
+        <h3 className="text-xl font-semibold">MCP Server</h3>
+        <p>Expose StruktX handlers as MCP tools over HTTP. Configure tools, auth, and consent, then serve via FastAPI.</p>
+
+        <h4 className="text-lg font-semibold">Configuration</h4>
+        <CodeBlock className="code-block" language="python" filename="mcp_config.py" showExample={true} code={`from strukt import StruktConfig
+
+config = StruktConfig(
+  # ... llm, handlers, etc.
+  mcp=dict(
+    enabled=True,
+    server_name="struktmcp",
+    include_handlers=["device_control","amenity_service","maintenance_or_helpdesk","bill_service","event_service","weather_service","schedule_future_event"],
+    default_consent_policy="ask-once",
+    tools={
+      "device_control": [
+        dict(
+          name="device_list",
+          description="List devices for a user/unit",
+          method_name="mcp_list",
+          parameters_schema={"type":"object","properties":{"user_id":{"type":"string"},"unit_id":{"type":"string"}},"required":["user_id","unit_id"]},
+        ),
+        dict(
+          name="device_execute",
+          description="Execute device commands",
+          method_name="mcp_execute",
+          usage_prompt="Call device_list first. Use attributes.identifier as deviceId; see provider rules.",
+          parameters_schema={"type":"object","properties":{"commands":{"type":"array"},"user_id":{"type":"string"},"unit_id":{"type":"string"}},"required":["commands","user_id","unit_id"]},
+        ),
+      ],
+      # ... other handlers
+    }
+  )
+)
+`} />
+
+        <h4 className="text-lg font-semibold">Serve</h4>
+        <p>Use the helper to create or extend a FastAPI app. The unified endpoint is GET/POST on the same path.</p>
+        <CodeBlock className="code-block" language="python" filename="serve_fastapi.py" showExample={true} code={`from fastapi import FastAPI
+from strukt import create, build_fastapi_app
+
+app = create(config)
+fastapi_app = build_fastapi_app(app, config)  # creates new app with /mcp
+
+# Or mount onto an existing FastAPI app under a prefix
+existing = FastAPI()
+build_fastapi_app(app, config, app=existing, prefix="/mcp")
+`} />
+
+        <h4 className="text-lg font-semibold">Endpoints</h4>
+        <CodeBlock className="code-block" language="bash" filename="http.sh" showExample={true} code={`# List tools
+curl -H "x-api-key: dev-key" http://localhost:8000/mcp
+
+# Call tool (implicit op=call_tool)
+curl -X POST -H "Content-Type: application/json" -H "x-api-key: dev-key" \
+  -d '{"tool_name":"amenity_check","args":{"user_id":"u1","unit_id":"UNIT","facility_name_query":"gym"}}' \
+  http://localhost:8000/mcp
+
+# Explicit list
+curl -X POST -H "Content-Type: application/json" -H "x-api-key: dev-key" \
+  -d '{"op":"list_tools"}' http://localhost:8000/mcp
+`} />
+
+        <h4 className="text-lg font-semibold">Auth & Consent</h4>
+        <p>API key via header (default <code>x-api-key</code>), and per-tool consent policies (ask-once by default) with persistence via MemoryEngine.</p>
+      </section>
+
+      <section id="mcp-extending-handlers" className="section">
+        <h3 className="text-xl font-semibold">Extending Handlers for MCP</h3>
+        <p>Add <code>mcp_*</code> methods to your handlers for precise, typed tool entrypoints. Reference them via <code>method_name</code> in the MCP config.</p>
+        <CodeBlock className="code-block" language="python" filename="handler_mcp.py" showExample={true} code={`from strukt.interfaces import Handler, LLMClient
+from strukt.types import InvocationState, HandlerResult
+
+class MyHandler(Handler):
+    def __init__(self, llm: LLMClient, toolkit):
+        self.llm = llm
+        self.toolkit = toolkit
+
+    # Regular Strukt entrypoint
+    def handle(self, state: InvocationState, parts: list[str]) -> HandlerResult:
+        ...
+
+    # MCP tool entrypoints (keyword-only args)
+    def mcp_list(self, *, user_id: str, unit_id: str):
+        return self.toolkit.list(user_id, unit_id)
+
+    def mcp_create(self, *, user_id: str, unit_id: str, payload: dict):
+        return self.toolkit.create(user_id=user_id, unit_id=unit_id, payload=payload)
+`} />
+        <p>In your MCP config, set <code>method_name</code> to call these methods:</p>
+        <CodeBlock className="code-block" language="python" filename="mcp_method_map.py" showExample={true} code={`mcp=dict(
+  tools={
+    "my_service": [
+      dict(
+        name="my_list",
+        description="List items",
+        method_name="mcp_list",
+        parameters_schema={
+          "type": "object",
+          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}},
+          "required": ["user_id","unit_id"]
+        },
+      ),
+      dict(
+        name="my_create",
+        description="Create item",
+        method_name="mcp_create",
+        parameters_schema={
+          "type":"object",
+          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}, "payload": {"type":"object"}},
+          "required": ["user_id","unit_id","payload"]
+        },
+      )
+    ]
+  }
+)
+`} />
+        <p>
+          You can also point <code>method_name</code> at toolkit methods using dotted paths, e.g. <code>"toolkit.book_amenity_data"</code>.
+          Dotted resolution supports <code>toolkit.*</code> and <code>_toolkit.*</code>.
+        </p>
+      </section>
+
+      <section id="mcp-config-reference" className="section">
+        <h3 className="text-xl font-semibold">MCP Config Reference</h3>
+        <ul className="list-disc pl-6">
+          <li><b>enabled</b>: Enable the MCP server integration.</li>
+          <li><b>server_name</b>: Server identifier (e.g. <code>"struktmcp"</code>).</li>
+          <li><b>include_handlers</b>: List of handler keys to expose.</li>
+          <li><b>auth_api_key.header_name</b>: Header to read API key (default <code>x-api-key</code>).</li>
+          <li><b>auth_api_key.env_var</b>: Env var holding the API key (default <code>STRUKTX_MCP_API_KEY</code>).</li>
+          <li><b>default_consent_policy</b>: Default tool consent (<code>always-ask</code> | <code>ask-once</code> | <code>always-allow</code> | <code>never-allow</code>).</li>
+          <li><b>tools</b>: Map of handler_name → list of tool configs:</li>
+        </ul>
+        <CodeBlock className="code-block" language="python" filename="mcp_tool_config.py" showExample={true} code={`# Per tool (MCPToolConfig)
+dict(
+  name="tool_name",                    # required
+  description="what it does",          # required
+  parameters_schema={...},              # JSON Schema for args
+  method_name="mcp_list",              # dotted path to callable on handler
+  required_scopes=["scope:read"],      # optional OAuth scopes metadata
+  consent_policy="ask-once",           # optional per-tool consent override
+  usage_prompt="LLM guidance...",      # optional extra prompt appended to description
+)
+`} />
+        <p>Consent decisions are persisted through your configured MemoryEngine when available.</p>
+      </section>
+
       <section id="langchain" className="section">
         <h3 className="text-xl font-semibold">LangChain Helpers</h3>
         <p>Use <code>LangChainLLMClient</code> and <code>create_structured_chain</code> to generate typed outputs.</p>

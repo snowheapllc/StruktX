@@ -37,6 +37,29 @@ class DeviceControlHandler(Handler):
         self._prompt_template = prompt_template or self._default_prompt()
         self._log = get_logger("devices.handler")
 
+    # --- MCP helpers ---
+    def mcp_list(self, *, user_id: str, unit_id: str, use_cache: bool = True):
+        return self._toolkit.list_devices(
+            user_id=user_id, unit_id=unit_id, use_cache=use_cache
+        )
+
+    def mcp_execute(self, *, commands: list[dict], user_id: str, unit_id: str):
+        # Validate then execute
+        # Convert dicts into toolkit model if needed; toolkit.validate accepts DeviceCommand instances
+        from .models import DeviceCommand
+
+        cmds = [DeviceCommand(**c) for c in commands]
+        validation = self._toolkit.validate(
+            commands=cmds, user_id=user_id, unit_id=unit_id
+        )
+        if not validation.get("valid"):
+            return {
+                "status": "error",
+                "message": validation.get("error_message"),
+                "invalid": validation.get("invalid_indices"),
+            }
+        return self._toolkit.execute(commands=cmds, user_id=user_id, unit_id=unit_id)
+
     def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
         try:
             user_id = (

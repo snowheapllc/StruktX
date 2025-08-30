@@ -327,6 +327,175 @@ cfg = StruktConfig(
 
 ## Ecosystem
 
+### MCP Server
+
+Expose StruktX handlers as MCP tools over HTTP.
+
+#### Configuration
+
+```python
+from strukt import StruktConfig
+
+config = StruktConfig(
+  mcp=dict(
+    enabled=True,
+    server_name="struktmcp",
+    include_handlers=[
+      "device_control","amenity_service","maintenance_or_helpdesk",
+      "bill_service","event_service","weather_service","schedule_future_event"
+    ],
+    default_consent_policy="ask-once",
+    tools={
+      "device_control": [
+        dict(
+          name="device_list",
+          description="List devices for a user/unit",
+          method_name="mcp_list",
+          parameters_schema={
+            "type":"object",
+            "properties":{"user_id":{"type":"string"},"unit_id":{"type":"string"}},
+            "required":["user_id","unit_id"]
+          },
+        ),
+        dict(
+          name="device_execute",
+          description="Execute device commands",
+          method_name="mcp_execute",
+          usage_prompt="Call device_list first. Use attributes.identifier as deviceId; follow provider rules.",
+          parameters_schema={
+            "type":"object",
+            "properties":{
+              "commands":{"type":"array"},
+              "user_id":{"type":"string"},
+              "unit_id":{"type":"string"}
+            },
+            "required":["commands","user_id","unit_id"]
+          },
+        ),
+      ],
+      # ... other handlers
+    }
+  )
+)
+```
+
+- `usage_prompt` appends extra guidance to tool descriptions.
+- Consent policy defaults to ask-once and persists via MemoryEngine.
+
+#### Serve via FastAPI
+
+```python
+from fastapi import FastAPI
+from strukt import create, build_fastapi_app
+
+app = create(config)
+
+# Create a new FastAPI app exposing /mcp
+fastapi_app = build_fastapi_app(app, config)
+
+# Or mount onto an existing FastAPI app under a prefix
+existing = FastAPI()
+build_fastapi_app(app, config, app=existing, prefix="/mcp")
+```
+
+#### Endpoints
+
+```bash
+# List tools (GET)
+curl -H "x-api-key: dev-key" http://localhost:8000/mcp
+
+# Call tool (implicit op=call_tool)
+curl -X POST -H "Content-Type: application/json" -H "x-api-key: dev-key" \
+  -d '{"tool_name":"amenity_check","args":{"user_id":"u1","unit_id":"UNIT","facility_name_query":"gym"}}' \
+  http://localhost:8000/mcp
+
+# Explicit list via POST
+curl -X POST -H "Content-Type: application/json" -H "x-api-key: dev-key" \
+  -d '{"op":"list_tools"}' http://localhost:8000/mcp
+```
+
+#### Extending Handlers for MCP
+
+Add `mcp_*` methods to handlers for precise tool entrypoints, then reference them via `method_name` in the MCP config.
+
+```python
+from strukt.interfaces import Handler, LLMClient
+from strukt.types import InvocationState, HandlerResult
+
+class MyHandler(Handler):
+    def __init__(self, llm: LLMClient, toolkit):
+        self.llm = llm
+        self.toolkit = toolkit
+
+    # Strukt entrypoint
+    def handle(self, state: InvocationState, parts: list[str]) -> HandlerResult:
+        ...
+
+    # MCP tool entrypoints (keyword-only args)
+    def mcp_list(self, *, user_id: str, unit_id: str):
+        return self.toolkit.list(user_id, unit_id)
+
+    def mcp_create(self, *, user_id: str, unit_id: str, payload: dict):
+        return self.toolkit.create(user_id=user_id, unit_id=unit_id, payload=payload)
+```
+
+Map the methods in the MCP config:
+
+```python
+mcp=dict(
+  tools={
+    "my_service": [
+      dict(
+        name="my_list",
+        description="List items",
+        method_name="mcp_list",
+        parameters_schema={
+          "type": "object",
+          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}},
+          "required": ["user_id","unit_id"]
+        },
+      ),
+      dict(
+        name="my_create",
+        description="Create item",
+        method_name="mcp_create",
+        parameters_schema={
+          "type":"object",
+          "properties": {"user_id": {"type":"string"}, "unit_id": {"type":"string"}, "payload": {"type":"object"}},
+          "required": ["user_id","unit_id","payload"]
+        },
+      )
+    ]
+  }
+)
+```
+
+You can also point `method_name` at toolkit methods using dotted paths (e.g., `"toolkit.book_amenity_data"`). Dotted resolution supports `toolkit.*` and `_toolkit.*`.
+
+#### MCP Config Reference
+
+- **enabled**: Enable the MCP integration.
+- **server_name**: Identifier for the server (e.g. `"struktmcp"`).
+- **include_handlers**: Handler keys to expose as tools.
+- **auth_api_key.header_name**: Request header for API key (default `x-api-key`).
+- **auth_api_key.env_var**: Env var that holds the API key (default `STRUKTX_MCP_API_KEY`).
+- **default_consent_policy**: `always-ask` | `ask-once` | `always-allow` | `never-allow`.
+- **tools**: Map of handler name → list of tool configs (MCPToolConfig):
+
+```python
+dict(
+  name="tool_name",                    # required
+  description="what it does",          # required
+  parameters_schema={...},              # JSON Schema for args
+  method_name="mcp_list",              # dotted path to callable on handler
+  required_scopes=["scope:read"],      # optional OAuth scopes metadata
+  consent_policy="ask-once",           # optional per-tool consent override
+  usage_prompt="LLM guidance...",      # optional extra prompt appended to description
+)
+```
+
+Consent decisions are persisted through your configured MemoryEngine when available.
+
 ### LangChain Helpers
 
 Use `LangChainLLMClient` and `create_structured_chain` to generate typed outputs.
@@ -340,7 +509,7 @@ class Foo(BaseModel):
     confidences: list[float] = []
     parts: list[str] = []
 
-# chain = create_structured_chain(llm_client=your_langchain_client, prompt_template="...", output_model=Foo)
+# chain = create_structured_chain(llm_client=your_langchain_client, prompt template, output_model=Foo)
 ```
 
 ### Logging

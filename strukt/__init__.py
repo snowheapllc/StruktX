@@ -8,6 +8,7 @@ from .config import (
     MemoryConfig,
     MiddlewareConfig,
     StruktConfig,
+    MCPConfig,
 )
 from .defaults import MemoryAugmentedLLMClient, AwsSigV4Signer
 from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
@@ -21,10 +22,12 @@ from .types import (
     StruktResponse,
     BackgroundTaskInfo,
 )
+from .mcp.asgi import build_fastapi_app
 
 __all__ = [
     "create",
     "StruktConfig",
+    "MCPConfig",
     "LLMClientConfig",
     "ClassifierConfig",
     "MemoryConfig",
@@ -46,4 +49,5 @@ __all__ = [
     "get_logger",
     "AwsSigV4Signer",
     "AWSSecretsManager",
+    "build_fastapi_app",
 ]
