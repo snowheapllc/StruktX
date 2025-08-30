@@ -55,7 +55,6 @@ llm = [
 vector = [
     "upstash-vector>=0.1.0",
     "chromadb>=0.5.0",
-    "sentence-transformers>=2.7.0",
 ]
 
 # Development dependencies
@@ -81,7 +80,6 @@ all = [
     "langchain-community>=0.2.0",
     "upstash-vector>=0.1.0",
     "chromadb>=0.5.0",
-    "sentence-transformers>=2.7.0",
 ]
 
 
