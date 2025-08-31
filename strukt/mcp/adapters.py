@@ -34,6 +34,15 @@ class ToolSpec:
     callable: Optional[MCPCallable] = None
 
 
+@dataclass
+class PromptSpec:
+    name: str
+    description: str
+    arguments_schema: Dict[str, Any] = field(default_factory=dict)
+    # Callable returns a list[PromptMessage]-like items or a single message dict
+    callable: Optional[MCPCallable] = None
+
+
 def _resolve_method(obj: Any, method_path: str | None) -> Optional[MCPCallable]:
     if not method_path:
         return None
@@ -151,6 +160,23 @@ def _signature_to_schema(fn: MCPCallable) -> Dict[str, Any]:
     return schema
 
 
+def _get_param_default(fn: MCPCallable, param_name: str) -> Optional[str]:
+    """Return the default value of a parameter on a callable, if any.
+
+    Used to pull per-tool defaults like x_consent_policy from mcp_* signatures.
+    """
+    try:
+        sig = inspect.signature(fn)
+        p = sig.parameters.get(param_name)
+        if p and p.default is not inspect._empty:
+            # Normalize to string for consent policy usage
+            val = p.default
+            return str(val) if not isinstance(val, str) else val
+    except Exception:
+        return None
+    return None
+
+
 def _auto_tool_name(handler_key: str, method_name: str) -> str:
     suffix = method_name[4:] if method_name.startswith("mcp_") else method_name
     base = handler_key[:-8] if handler_key.endswith("_service") else handler_key
@@ -203,8 +229,12 @@ def build_tools_from_handlers(
                         else _signature_to_schema(raw)
                     ),
                     required_scopes=t.required_scopes or [],
-                    consent_policy=t.consent_policy
-                    or getattr(handler, "mcp_consent_policy", None),
+                    # Prefer explicit config consent policy; else infer from signature default; else handler default
+                    consent_policy=(
+                        t.consent_policy
+                        or _get_param_default(raw, "x_consent_policy")
+                        or getattr(handler, "mcp_consent_policy", None)
+                    ),
                     callable=wrapped,  # type: ignore[arg-type]
                 )
 
@@ -227,8 +257,10 @@ def build_tools_from_handlers(
                     or f"Auto-discovered MCP method '{mname}' for '{key}'",
                     parameters_schema=_signature_to_schema(fn),
                     required_scopes=[],
+                    # Infer from signature default if available; else config default
                     consent_policy=(
-                        mcp_config.default_consent_policy if mcp_config else None
+                        _get_param_default(fn, "x_consent_policy")
+                        or (mcp_config.default_consent_policy if mcp_config else None)
                     ),
                     callable=_make_wrapped_callable(fn),
                 )
@@ -284,3 +316,40 @@ def build_tools_from_handlers(
                     if t.consent_policy:
                         existing.consent_policy = t.consent_policy
     return tools
+
+
+def build_prompts_from_handlers(
+    *, handlers: Dict[str, Any], include: List[str]
+) -> Dict[str, PromptSpec]:
+    """Auto-discover handler `mcp_prompt_*` methods and expose as MCP Prompts.
+
+    Each discovered method becomes a PromptSpec where the callable returns either:
+      - a dict representing a single PromptMessage (role/content), or
+      - a list of such dicts.
+    """
+    prompts: Dict[str, PromptSpec] = {}
+    for key, handler in handlers.items():
+        if include and key not in include:
+            continue
+        discovered = [
+            name
+            for name in dir(handler)
+            if name.startswith("mcp_prompt_") and callable(getattr(handler, name))
+        ]
+        for mname in discovered:
+            fn = getattr(handler, mname)
+            # auto name: <handler>_<suffix>
+            suffix = mname[len("mcp_prompt_") :]
+            prompt_name = f"{key}_{suffix}"
+            if prompt_name in prompts:
+                continue
+            prompts[prompt_name] = PromptSpec(
+                name=prompt_name,
+                description=(
+                    getattr(fn, "__doc__", None)
+                    or f"Auto-discovered MCP prompt '{mname}' for '{key}'"
+                ),
+                arguments_schema=_signature_to_schema(fn),
+                callable=fn,  # type: ignore[arg-type]
+            )
+    return prompts

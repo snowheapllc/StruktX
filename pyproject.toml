@@ -41,6 +41,7 @@ dependencies = [
     "botocore>=1.37.38",
     "inflect>=7.0.0",
     "fastapi>=0.116.1",
+    "fast-agent-mcp>=0.2.36",
 ]
 
 [project.optional-dependencies]
