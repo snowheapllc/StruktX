@@ -73,7 +73,7 @@ class DeviceDescriptor(BaseModel):
 # MCP-specific response models
 class MCPDeviceListResponse(BaseModel):
     """Response model for mcp_list function."""
-    
+
     devices: List[Dict[str, Any]] = Field(
         ..., description="List of device dictionaries"
     )
@@ -84,9 +84,16 @@ class MCPDeviceListResponse(BaseModel):
 
 class MCPDeviceExecuteResponse(BaseModel):
     """Response model for mcp_execute function."""
-    
-    status: str = Field(..., description="Execution status (DEVICE_CONTROL_SUCCESS, DEVICE_CONTROL_ERROR, etc.)")
+
+    status: str = Field(
+        ...,
+        description="Execution status (DEVICE_CONTROL_SUCCESS, DEVICE_CONTROL_ERROR, etc.)",
+    )
     response: str = Field(..., description="Human-readable response message")
     success: bool = Field(..., description="Whether the operation was successful")
-    commands_executed: int = Field(default=0, description="Number of commands that were executed")
-    error_details: str | None = Field(default=None, description="Detailed error information if any")
+    commands_executed: int = Field(
+        default=0, description="Number of commands that were executed"
+    )
+    error_details: str | None = Field(
+        default=None, description="Detailed error information if any"
+    )

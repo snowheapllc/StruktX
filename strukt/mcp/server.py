@@ -46,15 +46,17 @@ class MCPServerApp:
                 "inputSchema": t.parameters_schema,
             }
             # Only include title if it's different from name
-            if hasattr(t, 'title') and t.title and t.title != t.name:
+            if hasattr(t, "title") and t.title and t.title != t.name:
                 tool_spec["title"] = t.title
             # Only include outputSchema if provided, and normalize it for MCP compliance
-            if hasattr(t, 'output_schema') and t.output_schema:
+            if hasattr(t, "output_schema") and t.output_schema:
                 try:
                     normalized_schema = _normalize_schema_for_mcp(t.output_schema)
                     tool_spec["outputSchema"] = normalized_schema
                 except Exception as e:
-                    _log.warning(f"Failed to normalize output schema for tool {t.name}: {e}")
+                    _log.warning(
+                        f"Failed to normalize output schema for tool {t.name}: {e}"
+                    )
                     # Skip outputSchema if normalization fails
                     pass
             tools.append(tool_spec)
@@ -90,42 +92,60 @@ class MCPServerApp:
         if spec and spec.callable:
             try:
                 result = spec.callable(**args)
-                
+
                 # Debug: Log what we got from the tool
                 print(f"DEBUG call_tool: {tool_name} returned type: {type(result)}")
                 print(f"DEBUG call_tool: {tool_name} result: {result}")
-                
+
                 # Check if this tool has an output schema (indicating structured output expected)
-                has_output_schema = hasattr(spec, 'output_schema') and spec.output_schema
-                print(f"DEBUG call_tool: {tool_name} has_output_schema: {has_output_schema}")
-                
+                has_output_schema = (
+                    hasattr(spec, "output_schema") and spec.output_schema
+                )
+                print(
+                    f"DEBUG call_tool: {tool_name} has_output_schema: {has_output_schema}"
+                )
+
                 # If result is already in MCP format, return as-is
                 if isinstance(result, dict) and "content" in result:
-                    print(f"DEBUG call_tool: {tool_name} returning pre-formatted MCP result")
+                    print(
+                        f"DEBUG call_tool: {tool_name} returning pre-formatted MCP result"
+                    )
                     return result
-                
+
                 # For tools with output schema, return structured data
                 if has_output_schema:
                     print(f"DEBUG call_tool: {tool_name} processing structured output")
                     # Extract structured data
-                    if hasattr(result, 'model_dump'):
+                    if hasattr(result, "model_dump"):
                         structured_result = result.model_dump()
-                        print(f"DEBUG call_tool: {tool_name} Pydantic model_dump: {structured_result}")
+                        print(
+                            f"DEBUG call_tool: {tool_name} Pydantic model_dump: {structured_result}"
+                        )
                     elif isinstance(result, (dict, list, tuple)):
-                        structured_result = result if isinstance(result, dict) else {"data": list(result)}
-                        print(f"DEBUG call_tool: {tool_name} dict/list result: {structured_result}")
+                        structured_result = (
+                            result
+                            if isinstance(result, dict)
+                            else {"data": list(result)}
+                        )
+                        print(
+                            f"DEBUG call_tool: {tool_name} dict/list result: {structured_result}"
+                        )
                     else:
                         structured_result = {"value": result}
-                        print(f"DEBUG call_tool: {tool_name} other type wrapped: {structured_result}")
-                    
+                        print(
+                            f"DEBUG call_tool: {tool_name} other type wrapped: {structured_result}"
+                        )
+
                     # For MCP structured content, use structuredContent field
                     # Also include JSON text representation for backwards compatibility
                     try:
-                        text_repr = json.dumps(structured_result, indent=2, ensure_ascii=False)
+                        text_repr = json.dumps(
+                            structured_result, indent=2, ensure_ascii=False
+                        )
                     except (TypeError, ValueError):
                         text_repr = str(structured_result)
                     content = [{"type": "text", "text": text_repr}]
-                    
+
                     # Return the response with proper MCP structure
                     final_result = {
                         "content": content,
@@ -134,22 +154,26 @@ class MCPServerApp:
                         # Also add structured data at root level for validation
                         **structured_result,
                         # Provide a 'data' wrapper for clients expecting data.* paths
-                        "data": structured_result
+                        "data": structured_result,
                     }
-                    print(f"DEBUG call_tool: {tool_name} final structured result: {final_result}")
+                    print(
+                        f"DEBUG call_tool: {tool_name} final structured result: {final_result}"
+                    )
                     return final_result
-                
+
                 # For tools without output schema, return as text content
                 print(f"DEBUG call_tool: {tool_name} returning as text content")
                 return {
-                    "content": [{"type": "text", "text": str(result)}], 
-                    "isError": False
+                    "content": [{"type": "text", "text": str(result)}],
+                    "isError": False,
                 }
-                
+
             except Exception as e:
                 # Return error in MCP format
                 return {
-                    "content": [{"type": "text", "text": f"Tool execution failed: {str(e)}"}],
-                    "isError": True
+                    "content": [
+                        {"type": "text", "text": f"Tool execution failed: {str(e)}"}
+                    ],
+                    "isError": True,
                 }
         raise ValueError(f"Unknown tool: {tool_name}")

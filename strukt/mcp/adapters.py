@@ -63,20 +63,20 @@ def _resolve_method(obj: Any, method_path: str | None) -> Optional[MCPCallable]:
 def _wrap_result_to_mcp_content(result: Any) -> Any:
     # For MCP tools with output schemas, return the structured data directly
     # The server will handle wrapping it in the proper MCP format
-    
+
     # Handle Pydantic models - return the model itself, not the dumped data
     # The server will call model_dump() when it needs the dictionary
-    if hasattr(result, 'model_dump'):
+    if hasattr(result, "model_dump"):
         return result  # Return the Pydantic model directly
-    
+
     # Handle dictionaries - return as-is for structured tools
     if isinstance(result, dict):
         return result
-    
-    # Handle lists/arrays - return as-is for structured tools  
+
+    # Handle lists/arrays - return as-is for structured tools
     if isinstance(result, (list, tuple)):
         return list(result)
-    
+
     # For other types, return as-is and let the server handle text conversion
     return result
 
@@ -109,42 +109,48 @@ def _normalize_schema_for_mcp(schema: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize a JSON schema to be MCP-compliant while preserving property types."""
     if not isinstance(schema, dict):
         return {"type": "object"}
-    
+
     normalized = schema.copy()
-    
+
     # MCP requires root-level output schemas to be "object" type
     # But preserve property types within the object
     if "type" in normalized:
         normalized["type"] = "object"
-    
+
     # Recursively normalize nested schemas (but only object-type schemas with properties)
     if "properties" in normalized and isinstance(normalized["properties"], dict):
         for prop_name, prop_schema in normalized["properties"].items():
             if isinstance(prop_schema, dict) and "properties" in prop_schema:
                 # Only normalize object schemas with nested properties
-                normalized["properties"][prop_name] = _normalize_schema_for_mcp(prop_schema)
-    
+                normalized["properties"][prop_name] = _normalize_schema_for_mcp(
+                    prop_schema
+                )
+
     # Keep array items and normalize them
     if "items" in normalized and isinstance(normalized["items"], dict):
         normalized["items"] = _normalize_schema_for_mcp(normalized["items"])
-    
+
     # Handle additionalProperties
-    if "additionalProperties" in normalized and isinstance(normalized["additionalProperties"], dict):
-        normalized["additionalProperties"] = _normalize_schema_for_mcp(normalized["additionalProperties"])
-    
+    if "additionalProperties" in normalized and isinstance(
+        normalized["additionalProperties"], dict
+    ):
+        normalized["additionalProperties"] = _normalize_schema_for_mcp(
+            normalized["additionalProperties"]
+        )
+
     return normalized
 
 
 def _py_type_to_schema(tp: Any) -> Dict[str, Any]:
     # Handle Pydantic models
-    if hasattr(tp, 'model_json_schema'):
+    if hasattr(tp, "model_json_schema"):
         try:
             pydantic_schema = tp.model_json_schema()
             # Normalize the Pydantic schema to ensure MCP compliance
             return _normalize_schema_for_mcp(pydantic_schema)
         except Exception:
             pass
-    
+
     # Handle Optional/Union by selecting the first non-None arg
     origin = get_origin(tp)
     args = get_args(tp)
@@ -210,7 +216,7 @@ def _extract_output_schema(fn: MCPCallable) -> Dict[str, Any] | None:
     """Extract output schema from function return type annotation."""
     try:
         resolved_hints = get_type_hints(fn)
-        return_type = resolved_hints.get('return')
+        return_type = resolved_hints.get("return")
         if return_type is None or return_type == inspect._empty:
             return None
         schema = _py_type_to_schema(return_type)
@@ -263,10 +269,10 @@ def build_tools_from_handlers(
                 desc = t.description or getattr(raw, "__doc__", None) or t.name
                 if getattr(t, "usage_prompt", None):
                     desc = f"{desc}\n\nUSAGE:\n{t.usage_prompt}"
-                
+
                 # Extract output schema from return type annotation
                 output_schema = t.output_schema or _extract_output_schema(raw)
-                
+
                 tools[t.name] = ToolSpec(
                     name=t.name,
                     description=desc,
@@ -293,10 +299,10 @@ def build_tools_from_handlers(
                 if tool_name in tools:
                     # do not overwrite an explicitly defined tool of same name
                     continue
-                
+
                 # Extract output schema from return type annotation
                 output_schema = _extract_output_schema(fn)
-                
+
                 tools[tool_name] = ToolSpec(
                     name=tool_name,
                     description=getattr(fn, "__doc__", None)
@@ -326,12 +332,12 @@ def build_tools_from_handlers(
             mcp_callable = getattr(handler, "mcp_handle", None)
             if not callable(mcp_callable):
                 mcp_callable = _make_generic_callable(handler)
-            
+
             # Extract output schema from return type annotation
             output_schema = getattr(handler, "mcp_output_schema", None)
             if output_schema is None and callable(mcp_callable):
                 output_schema = _extract_output_schema(mcp_callable)
-            
+
             tools[tool_name] = ToolSpec(
                 name=tool_name,
                 description=desc,
