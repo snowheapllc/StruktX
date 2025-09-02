@@ -3239,7 +3239,7 @@ wheels = [
 
 [[package]]
 name = "struktx-ai"
-version = "0.0.3b1"
+version = "0.0.3b2"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
