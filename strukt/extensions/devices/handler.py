@@ -8,7 +8,7 @@ from strukt.logging import get_logger
 from strukt.prompts import render_prompt_with_safe_braces
 from strukt.types import HandlerResult, InvocationState
 
-from .models import DeviceControlResponse
+from .models import DeviceControlResponse, MCPDeviceListResponse, MCPDeviceExecuteResponse
 from .prompts import (
     DEVICE_CONTROL_HANDLER_PROMPT_TEMPLATE,
     determine_device_providers,
@@ -38,27 +38,60 @@ class DeviceControlHandler(Handler):
         self._log = get_logger("devices.handler")
 
     # --- MCP helpers ---
-    def mcp_list(self, *, user_id: str, unit_id: str, use_cache: bool = True):
-        return self._toolkit.list_devices(
+    def mcp_list(self, *, user_id: str, unit_id: str, use_cache: bool = True) -> MCPDeviceListResponse:
+        """List all devices for the given user and unit."""
+        devices = self._toolkit.list_devices(
             user_id=user_id, unit_id=unit_id, use_cache=use_cache
         )
-
-    def mcp_execute(self, *, commands: list[dict], user_id: str, unit_id: str):
-        # Validate then execute
-        # Convert dicts into toolkit model if needed; toolkit.validate accepts DeviceCommand instances
-        from .models import DeviceCommand
-
-        cmds = [DeviceCommand(**c) for c in commands]
-        validation = self._toolkit.validate(
-            commands=cmds, user_id=user_id, unit_id=unit_id
+        return MCPDeviceListResponse(
+            devices=devices,
+            count=len(devices),
+            user_id=user_id,
+            unit_id=unit_id
         )
-        if not validation.get("valid"):
-            return {
-                "status": "error",
-                "message": validation.get("error_message"),
-                "invalid": validation.get("invalid_indices"),
-            }
-        return self._toolkit.execute(commands=cmds, user_id=user_id, unit_id=unit_id)
+
+    def mcp_execute(self, *, full_user_query: str, user_queries: list[str], user_id: str, unit_id: str) -> MCPDeviceExecuteResponse:
+        """Execute device control commands using natural language queries.
+        
+        Args:
+            full_user_query: The complete user query string
+            user_queries: List of natural language commands like ["turn off kitchen AC", "turn on bedroom AC"]
+            user_id: User identifier
+            unit_id: Unit identifier
+            
+        Returns:
+            MCPDeviceExecuteResponse with status and execution details
+        """
+        # Create an InvocationState with the context
+        state = InvocationState(
+            text=full_user_query if full_user_query else user_queries[0],  # Use first query as main text
+            context={"user_id": user_id, "unit_id": unit_id}
+        )
+        
+        # Use the existing handler logic
+        result = self.handle(state, user_queries)
+        
+        # Extract command count from the result if available
+        commands_executed = 0
+        error_details = None
+        
+        if result.status == "DEVICE_CONTROL_SUCCESS":
+            # Try to extract command count from the response or context
+            if hasattr(result, 'context') and result.context:
+                commands_executed = result.context.get('commands_executed', 0)
+        else:
+            error_details = result.response
+        
+        # Return a validated Pydantic response
+        return MCPDeviceExecuteResponse(
+            status=result.status,
+            response=result.response,
+            success=result.status == "DEVICE_CONTROL_SUCCESS",
+            commands_executed=commands_executed,
+            error_details=error_details
+        )
+
+
 
     def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
         try:

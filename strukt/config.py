@@ -63,8 +63,8 @@ class MCPToolConfig:
     description: str
     parameters_schema: Dict[str, Any] = field(default_factory=dict)
     method_name: str | None = None  # attribute on handler to call, else generic
-    required_scopes: List[str] = field(default_factory=list)
-    consent_policy: str = "ask-once"  # default consent
+    title: str | None = None  # Optional human-readable name for display
+    output_schema: Dict[str, Any] | None = None  # Optional output schema
     usage_prompt: str | None = None  # optional, additional guidance for LLMs
 
 

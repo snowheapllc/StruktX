@@ -68,10 +68,10 @@ class MCPExposable(Protocol):
     mcp_description: str  # type: ignore[assignment]
     # JSON Schema for input parameters
     mcp_parameters_schema: Dict[str, Any]  # type: ignore[assignment]
-    # OAuth/OIDC scope names required to execute this tool
-    mcp_required_scopes: List[str]  # type: ignore[assignment]
-    # Consent policy string (always-ask, ask-once, always-allow, never-allow)
-    mcp_consent_policy: str  # type: ignore[assignment]
+    # Optional human-readable title for display
+    mcp_title: str | None  # type: ignore[assignment]
+    # Optional output schema for structured results
+    mcp_output_schema: Dict[str, Any] | None  # type: ignore[assignment]
 
     # The callable to execute when the tool is invoked by the MCP host
     def mcp_handle(self, **kwargs: Any) -> Any: ...
