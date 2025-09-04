@@ -20,6 +20,10 @@ from .middleware import Middleware
 from .types import InvocationState, StruktQueryEnum, StruktResponse, BackgroundTaskInfo
 from .utils import coerce_factory, load_factory
 from .logging import get_logger, StruktLogger
+from .tracing import (
+    init_otel,
+    enable_global_tracing,
+)
 
 
 class Strukt:
@@ -287,6 +291,19 @@ def create(config: StruktConfig) -> Strukt:
             project_name=config.weave.project_name, environment=config.weave.environment
         )
 
+        # Enable global unified tracing
+        enable_global_tracing()
+
+        # Auto-instrument all StruktX base classes and their methods (disabled for now)
+        # auto_instrument_struktx()
+
+    # Initialize OpenTelemetry (export to Weave OTLP) if enabled
+    if getattr(config, "opentelemetry", None):
+        try:
+            init_otel(config.opentelemetry)
+        except Exception:
+            pass
+
     llm = _build_llm(config)
     memory = _build_memory(config, llm)
     # Optionally build a KnowledgeStore bound to the engine
@@ -312,5 +329,7 @@ def create(config: StruktConfig) -> Strukt:
         memory=memory,
         middleware=middleware,
         weave_config=config.weave,
+        tracing_config=config.tracing,
+        evaluation_config=config.evaluation,
     )
     return Strukt(engine)

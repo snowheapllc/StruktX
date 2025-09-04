@@ -28,6 +28,12 @@ from .types import (
     BackgroundTaskInfo,
 )
 from .logging import get_logger
+from .tracing import (
+    strukt_trace,
+    unified_trace_context,
+    generate_trace_name,
+)
+from .evaluation import log_post_run_evaluation
 
 
 class Engine:
@@ -40,6 +46,8 @@ class Engine:
         memory: MemoryEngine | None = None,
         middleware: list[Middleware] | None = None,
         weave_config: Optional[object] = None,  # WeaveConfig type
+        tracing_config: Optional[object] = None,  # TracingConfig type
+        evaluation_config: Optional[object] = None,  # EvaluationConfig type
     ) -> None:
         self._classifier = classifier
         self._handlers = handlers
@@ -47,6 +55,8 @@ class Engine:
         self._memory = memory
         self._middleware = list(middleware or [])
         self._weave_config = weave_config
+        self._tracing_config = tracing_config
+        self._evaluation_config = evaluation_config
 
         # Initialize logger for Weave tracking
         self._logger = get_logger("struktx-engine")
@@ -126,15 +136,40 @@ class Engine:
                 **kwargs,
             }
 
-            # Friendly op name with StruktX namespace and contextual display name
-            op_base_name = f"StruktX.Engine.{operation_name}"
+            # Collapse status ops to attributes when configured
+            collapse = False
+            try:
+                if self._tracing_config is not None:
+                    collapse = bool(
+                        getattr(self._tracing_config, "collapse_status_ops", False)
+                    )
+            except Exception:
+                collapse = False
 
-            @weave.op(name=op_base_name, call_display_name=contextual_name)
-            def _emit_operation(attrs: dict) -> dict:  # type: ignore[no-redef]
-                return attrs
+            if collapse and operation_name in {
+                "engine_run_start",
+                "engine_run_complete",
+                "engine_run_error",
+                "grouped_handlers_start",
+                "grouped_handlers_complete",
+                "parallel_execution_start",
+                "parallel_execution_complete",
+                "parallel_execution_error",
+                "background_task_created",
+                "background_task_scheduled",
+            }:
+                with weave.attributes({f"status.{operation_name}": attributes}):
+                    # Status operation collapsed to attributes
+                    self._logger.debug(
+                        f"Status operation {operation_name} logged as attributes"
+                    )
+            else:
 
-            with weave.attributes(attributes):
-                _emit_operation(attributes)
+                def _emit_operation(attrs: dict) -> dict:  # type: ignore[no-redef]
+                    return attrs
+
+                with weave.attributes(attributes):
+                    _emit_operation(attributes)
 
             self._logger.debug(
                 f"Weave operation logged: {contextual_name} (ID: {op_id})"
@@ -195,111 +230,68 @@ class Engine:
                 f"memory_{operation}", memory_type=type(self._memory).__name__, **kwargs
             )
 
+    @strukt_trace(name="StruktX.Engine.run", call_display_name=None)
     def run(self, state: InvocationState) -> List[HandlerResult]:
-        # Wrap the entire engine run in a Weave operation
-        if self._weave_available:
+        """Main engine run method - all operations will be nested under this call."""
+        # Determine thread/session id for grouping
+        thread_id = None
+        user_context = {}
+        try:
+            ctx = getattr(state, "context", {}) or {}
+            thread_id = ctx.get("thread_id") or ctx.get("session_id")
+            user_context = dict(ctx)
+        except Exception:
+            thread_id = None
+
+        # Generate custom trace name using userID-unitID-threadID-timestamp format
+        custom_trace_name = generate_trace_name(user_context)
+
+        # Compute display label for root op from tracing config
+        label = "Engine"
+        try:
+            if self._tracing_config is not None:
+                label = (
+                    getattr(self._tracing_config, "component_label", "Engine")
+                    or "Engine"
+                )
+        except Exception:
+            label = "Engine"
+
+        # Extract user ID or use context for display name
+        user_id = user_context.get("user_id") if user_context else None
+        display_context = user_id if user_id else "context"
+
+        # Use unified trace context to ensure everything is nested
+        with unified_trace_context(
+            thread_id, f"{label}.run({display_context})", custom_trace_name
+        ):
+            start_time = time.time()
+            run_id = str(uuid.uuid4())
+
+            user_context = (
+                self._extract_user_context(state)
+                if self._should_auto_track_user_context()
+                else user_context
+            )
+
+            results = self._run_with_context(state, start_time, run_id, user_context)
+
+            # Post-run evaluation/logging (no-op unless enabled)
             try:
-                import weave
-
-                # Extract user context
-                user_context = (
-                    self._extract_user_context(state)
-                    if self._should_auto_track_user_context()
-                    else {}
+                display_name = None
+                if thread_id:
+                    display_name = f"engine_run:{thread_id}"
+                log_post_run_evaluation(
+                    getattr(self, "_evaluation_config", None),
+                    input_text=state.text,
+                    input_context=state.context,
+                    results=results,
+                    display_name=display_name,
                 )
-
-                # Create contextual operation name for engine run
-                base_op_name = "StruktX.Engine.run"
-                contextual_name = self._create_contextual_operation_name(
-                    base_op_name, user_context
-                )
-
-                @weave.op(name=base_op_name, call_display_name=contextual_name)
-                def _execute_engine_run(engine_obj, state_obj):
-                    start_time = time.time()
-                    run_id = str(uuid.uuid4())
-                    results = engine_obj._run_with_context(
-                        state_obj, start_time, run_id, user_context
-                    )
-
-                    # Extract LLM responses and structured outputs for the main trace
-                    llm_responses = []
-                    structured_outputs = []
-                    for result in results:
-                        if hasattr(result, "response") and result.response:
-                            llm_responses.append(result.response)
-
-                        # Capture structured outputs (like DeviceControlResponse)
-                        if hasattr(result, "commands") and result.commands:
-                            structured_outputs.append(
-                                {
-                                    "type": "device_commands",
-                                    "response": result.response,
-                                    "commands": result.commands,
-                                }
-                            )
-                        elif hasattr(result, "data") and result.data:
-                            structured_outputs.append(
-                                {
-                                    "type": "structured_data",
-                                    "response": result.response,
-                                    "data": result.data,
-                                }
-                            )
-                        elif hasattr(result, "result") and result.result:
-                            structured_outputs.append(
-                                {
-                                    "type": "handler_result",
-                                    "response": result.response,
-                                    "result": result.result,
-                                }
-                            )
-
-                    return results, llm_responses, structured_outputs
-
-                with weave.attributes(
-                    {
-                        "engine_component": "struktx_engine",
-                        "context": user_context,
-                        "input_text": state.text,
-                        "input_context": state.context,
-                    }
-                ):
-                    results, llm_responses, structured_outputs = _execute_engine_run(
-                        self, state
-                    )
-
-                    # Add LLM outputs and structured data to the main trace attributes
-                    if llm_responses or structured_outputs:
-                        import weave
-
-                        attributes = {
-                            "llm_responses": llm_responses,
-                            "llm_response_count": len(llm_responses),
-                        }
-                        if structured_outputs:
-                            attributes["structured_outputs"] = structured_outputs
-                            attributes["structured_output_count"] = len(
-                                structured_outputs
-                            )
-
-                        with weave.attributes(attributes):
-                            pass  # This adds the attributes to the current trace
-
-                    return results
             except Exception:
-                # Fallback to direct execution if Weave fails
                 pass
 
-        # Direct execution fallback
-        start_time = time.time()
-        run_id = str(uuid.uuid4())
-        user_context = (
-            self._extract_user_context(state)
-            if self._should_auto_track_user_context()
-            else None
-        )
-        return self._run_with_context(state, start_time, run_id, user_context)
+            return results
 
     def _run_with_context(
         self,
@@ -410,6 +402,7 @@ class Engine:
             self._logger.error(f"Engine run failed: {e}")
             raise
 
+    @strukt_trace(name="StruktX.Engine.classify", call_display_name="Engine.classify")
     def _classify(
         self, state: InvocationState, user_context: dict = None
     ) -> tuple[InvocationState, QueryClassification]:
@@ -418,43 +411,8 @@ class Engine:
         # Apply middleware before classification
         state = apply_before_classify(self._middleware, state)
 
-        # Execute classification with Weave logging wrapper
-        if self._weave_available:
-            try:
-                import weave
-
-                # Extract user context for classifier operation
-                user_context = {}
-                if hasattr(state, "context") and state.context:
-                    user_context = dict(state.context)
-
-                # Create contextual operation name for classifier
-                classifier_name = type(self._classifier).__name__
-                base_op_name = f"StruktX.Classifier.{classifier_name}.classify"
-                contextual_name = self._create_contextual_operation_name(
-                    base_op_name, user_context
-                )
-
-                @weave.op(name=base_op_name, call_display_name=contextual_name)
-                def _execute_classifier_op(classifier_obj, state_obj):
-                    return classifier_obj.classify(state_obj)
-
-                with weave.attributes(
-                    {
-                        "classifier_type": classifier_name,
-                        "context": user_context,
-                        "input_text": state.text,
-                    }
-                ):
-                    classification: QueryClassification = _execute_classifier_op(
-                        self._classifier, state
-                    )
-            except Exception:
-                # Fallback to direct execution if Weave fails
-                classification: QueryClassification = self._classifier.classify(state)
-        else:
-            # Execute classifier directly if Weave not available
-            classification: QueryClassification = self._classifier.classify(state)
+        # Execute classification - now traced via auto-instrumentation
+        classification: QueryClassification = self._classifier.classify(state)
 
         # Apply middleware after classification
         state, classification = apply_after_classify(
@@ -485,6 +443,10 @@ class Engine:
             grouped[qtype].append(part)
         return grouped
 
+    @strukt_trace(
+        name="StruktX.Engine.execute_grouped_handlers",
+        call_display_name="Engine.execute_grouped_handlers",
+    )
     def _execute_grouped_handlers(
         self,
         state: InvocationState,
@@ -494,70 +456,22 @@ class Engine:
     ) -> List[HandlerResult]:
         start_time = time.time()
         execution_id = str(uuid.uuid4())
-
-        self._log_operation(
-            "grouped_handlers_start",
-            user_context=user_context,
-            execution_id=execution_id,
-            query_types=list(grouped.keys()),
-            total_parts=sum(len(parts) for parts in grouped.values()),
-            input_text=state.text,
-        )
-
         results: List[HandlerResult] = []
         background_tasks = []
         normal_tasks = []
 
-        for qtype, parts in grouped.items():
-            handler = self._handlers.get(qtype) or fallback
-            if handler is None:
-                self._logger.warn(f"No handler found for query type: {qtype}")
-                continue
+        # Execute grouped handlers - now traced via decorator
+        self._do_grouped_handlers(
+            state,
+            grouped,
+            fallback,
+            user_context,
+            execution_id,
+            results,
+            background_tasks,
+            normal_tasks,
+        )
 
-            # Apply middleware before handling
-            state, parts = apply_before_handle(self._middleware, state, qtype, parts)
-
-            # Check if middleware wants to run this in background
-            if apply_should_run_background(self._middleware, state, qtype, parts):
-                # Get background message from middleware
-                background_message = apply_get_background_message(
-                    self._middleware, state, qtype, parts
-                )
-
-                # Get custom return query type from middleware
-                return_query_type = apply_get_return_query_type(
-                    self._middleware, state, qtype, parts
-                )
-
-                # Create background task and return immediate response
-                task_id = self._create_background_task(handler, state, qtype, parts)
-                background_tasks.append(task_id)
-
-                result = HandlerResult(
-                    response=background_message + f" (Task ID: {task_id})",
-                    status=return_query_type,
-                )
-                results.append(result)
-
-                self._log_operation(
-                    "background_task_scheduled",
-                    execution_id=execution_id,
-                    task_id=task_id,
-                    query_type=qtype,
-                    return_status=return_query_type,
-                )
-            else:
-                # Add to normal tasks for parallel execution
-                normal_tasks.append((qtype, parts, handler))
-
-        # Execute normal tasks in parallel (regardless of background tasks)
-        if normal_tasks:
-            parallel_results = self._execute_handlers_parallel(
-                state, normal_tasks, user_context
-            )
-            results.extend(parallel_results)
-
-        # Log execution completion
         duration = time.time() - start_time
         self._log_operation(
             "grouped_handlers_complete",
@@ -571,6 +485,59 @@ class Engine:
 
         return results
 
+    def _do_grouped_handlers(
+        self,
+        state: InvocationState,
+        grouped: Dict[str, List[str]],
+        fallback: Handler | None,
+        user_context: dict | None,
+        execution_id: str,
+        results: List[HandlerResult],
+        background_tasks: List[str],
+        normal_tasks: List[tuple[str, List[str], Handler]],
+    ) -> None:
+        for qtype, parts in grouped.items():
+            handler = self._handlers.get(qtype) or fallback
+            if handler is None:
+                self._logger.warn(f"No handler found for query type: {qtype}")
+                continue
+
+            state, parts = apply_before_handle(self._middleware, state, qtype, parts)
+
+            if apply_should_run_background(self._middleware, state, qtype, parts):
+                background_message = apply_get_background_message(
+                    self._middleware, state, qtype, parts
+                )
+                return_query_type = apply_get_return_query_type(
+                    self._middleware, state, qtype, parts
+                )
+                task_id = self._create_background_task(handler, state, qtype, parts)
+                background_tasks.append(task_id)
+                result = HandlerResult(
+                    response=background_message + f" (Task ID: {task_id})",
+                    status=return_query_type,
+                )
+                results.append(result)
+                self._log_operation(
+                    "background_task_scheduled",
+                    execution_id=execution_id,
+                    task_id=task_id,
+                    query_type=qtype,
+                    return_status=return_query_type,
+                )
+            else:
+                normal_tasks.append((qtype, parts, handler))
+
+        if normal_tasks:
+            parallel_results = self._execute_handlers_parallel(
+                state, normal_tasks, user_context
+            )
+            results.extend(parallel_results)
+
+    @strukt_trace(
+        name="StruktX.Engine.execute_handlers_parallel",
+        call_display_name="Engine.execute_handlers_parallel",
+    )
     def _execute_handlers_parallel(
         self,
         state: InvocationState,
@@ -581,55 +548,50 @@ class Engine:
         start_time = time.time()
         parallel_id = str(uuid.uuid4())
 
-        self._log_operation(
-            "parallel_execution_start",
-            user_context=user_context,
-            parallel_id=parallel_id,
-            task_count=len(tasks),
-            input_text=state.text,
-        )
-
         results: List[HandlerResult] = []
 
-        # Use ThreadPoolExecutor for parallel execution
-        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
-            # Submit all tasks
-            future_to_task = {}
-            for qtype, parts, handler in tasks:
-                future = executor.submit(
-                    self._execute_single_handler,
-                    state,
-                    qtype,
-                    parts,
-                    handler,
-                    user_context,
-                )
-                future_to_task[future] = (qtype, parts, handler)
+        # Use weave ThreadPoolExecutor for proper trace nesting
+        try:
+            import weave
 
-            # Collect results as they complete
-            for future in as_completed(future_to_task):
-                qtype, parts, handler = future_to_task[future]
-                try:
-                    result = future.result()
-                    results.append(result)
-                except Exception as e:
-                    # Handle any exceptions from parallel execution
-                    error_result = HandlerResult(
-                        response=f"Error executing {qtype}: {str(e)}",
-                        status="error",
+            with weave.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+                future_to_task = {}
+                for qtype, parts, handler in tasks:
+                    future = executor.submit(
+                        self._execute_single_handler,
+                        state,
+                        qtype,
+                        parts,
+                        handler,
+                        user_context,
+                        None,
                     )
-                    results.append(error_result)
+                    future_to_task[future] = (qtype, parts, handler)
 
-                    # Log parallel execution error
-                    self._log_operation(
-                        "parallel_execution_error",
-                        parallel_id=parallel_id,
-                        query_type=qtype,
-                        error=str(e),
-                        error_type=type(e).__name__,
-                    )
+                for future in as_completed(future_to_task):
+                    qtype, parts, handler = future_to_task[future]
+                    try:
+                        result = future.result()
+                        results.append(result)
+                    except Exception as e:
+                        error_result = HandlerResult(
+                            response=f"Error executing {qtype}: {str(e)}",
+                            status="error",
+                        )
+                        results.append(error_result)
+                        self._log_operation(
+                            "parallel_execution_error",
+                            parallel_id=parallel_id,
+                            query_type=qtype,
+                            error=str(e),
+                            error_type=type(e).__name__,
+                        )
+        except ImportError:
+            # Fallback to regular ThreadPoolExecutor if weave not available
+            self._execute_handlers_parallel_fallback(
+                state, tasks, user_context, results, parallel_id
+            )
 
-        # Log parallel execution completion
         duration = time.time() - start_time
         self._log_operation(
             "parallel_execution_complete",
@@ -642,6 +604,61 @@ class Engine:
 
         return results
 
+    def _execute_handlers_parallel_fallback(
+        self,
+        state: InvocationState,
+        tasks: List[tuple[str, List[str], Handler]],
+        user_context: dict | None,
+        results: List[HandlerResult],
+        parallel_id: str,
+    ) -> None:
+        try:
+            from opentelemetry import context as otel_context  # type: ignore
+        except Exception:
+            otel_context = None  # type: ignore
+
+        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            future_to_task = {}
+            parent_ctx = None
+            try:
+                if otel_context is not None:
+                    parent_ctx = otel_context.get_current()
+            except Exception:
+                parent_ctx = None
+            for qtype, parts, handler in tasks:
+                future = executor.submit(
+                    self._execute_single_handler,
+                    state,
+                    qtype,
+                    parts,
+                    handler,
+                    user_context,
+                    parent_ctx,
+                )
+                future_to_task[future] = (qtype, parts, handler)
+            for future in as_completed(future_to_task):
+                qtype, parts, handler = future_to_task[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    error_result = HandlerResult(
+                        response=f"Error executing {qtype}: {str(e)}",
+                        status="error",
+                    )
+                    results.append(error_result)
+                    self._log_operation(
+                        "parallel_execution_error",
+                        parallel_id=parallel_id,
+                        query_type=qtype,
+                        error=str(e),
+                        error_type=type(e).__name__,
+                    )
+
+    @strukt_trace(
+        name="StruktX.Engine.execute_single_handler",
+        call_display_name="Engine.execute_single_handler",
+    )
     def _execute_single_handler(
         self,
         state: InvocationState,
@@ -649,48 +666,24 @@ class Engine:
         parts: List[str],
         handler: Handler,
         user_context: dict | None = None,
+        parent_otel_ctx: object | None = None,
     ) -> HandlerResult:
         """Execute a single handler and apply middleware."""
         start_time = time.time()
 
+        # Attach OTEL parent context if provided (for cross-thread propagation)
+        token = None
         try:
-            # Execute handler with Weave logging wrapper
-            if self._weave_available:
-                try:
-                    import weave
+            if parent_otel_ctx is not None:
+                from opentelemetry import context as otel_context  # type: ignore
 
-                    # Extract user context for handler operation
-                    user_context = {}
-                    if hasattr(state, "context") and state.context:
-                        user_context = dict(state.context)
+                token = otel_context.attach(parent_otel_ctx)  # type: ignore
+        except Exception:
+            token = None
 
-                    # Create contextual operation name for handler
-                    handler_name = type(handler).__name__
-                    base_op_name = f"StruktX.Handler.{handler_name}.handle"
-                    contextual_name = self._create_contextual_operation_name(
-                        base_op_name, user_context
-                    )
-
-                    @weave.op(name=base_op_name, call_display_name=contextual_name)
-                    def _execute_handler_op(handler_obj, state_obj, parts_obj):
-                        return handler_obj.handle(state_obj, parts_obj)
-
-                    with weave.attributes(
-                        {
-                            "handler_type": handler_name,
-                            "query_type": query_type,
-                            "context": user_context,
-                            "input_parts": parts,
-                            "input_text": state.text,
-                        }
-                    ):
-                        result = _execute_handler_op(handler, state, parts)
-                except Exception:
-                    # Fallback to direct execution if Weave fails
-                    result = handler.handle(state, parts)
-            else:
-                # Execute handler directly if Weave not available
-                result = handler.handle(state, parts)
+        try:
+            # Execute handler - now traced via auto-instrumentation
+            result = handler.handle(state, parts)
 
             # Apply middleware after handling
             final_result = apply_after_handle(
@@ -717,6 +710,14 @@ class Engine:
             )
 
             return error_result
+        finally:
+            try:
+                if token is not None:
+                    from opentelemetry import context as otel_context  # type: ignore
+
+                    otel_context.detach(token)  # type: ignore
+            except Exception:
+                pass
 
     def _create_background_task(
         self,

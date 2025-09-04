@@ -91,6 +91,52 @@ class WeaveConfig:
 
 
 @dataclass
+class OpenTelemetryConfig:
+    """Configuration for OpenTelemetry tracing export to Weave OTLP endpoint.
+
+    By default this is disabled and imposes no overhead unless enabled.
+    """
+
+    enabled: bool = False
+    # If not provided, derived from WANDB_BASE_URL or defaults to https://trace.wandb.ai
+    export_endpoint: str | None = None  # e.g. "https://trace.wandb.ai/otel/v1/traces"
+    # If not provided, read from WANDB_PROJECT_ID env (format: "<entity>/<project>")
+    project_id: str | None = None
+    # Use OpenAI auto-instrumentation by default (works with OpenRouter-compatible OpenAI SDKs)
+    use_openai_instrumentation: bool = True
+
+
+@dataclass
+class TracingConfig:
+    """Internal tracing toggles that do not affect business logic behavior."""
+
+    enable_middleware_tracing: bool = False  # optional: wrap middleware hooks in spans
+    collapse_status_ops: bool = True  # collapse status events into attributes
+    # Display label to use for Engine ops (e.g., "Engine", "Runner", "StruktX")
+    component_label: str = "Engine"
+
+
+@dataclass
+class EvaluationConfig:
+    """Evaluation pipeline configuration.
+
+    Without a dataset, this defaults to a lightweight post-run logger with
+    negligible overhead when disabled. Built-in scorers are opt-in to avoid
+    unexpected token usage/cost.
+    """
+
+    enabled: bool = False
+    evaluation_name: str | None = None
+    # Future: accept dataset provider/import; absent means imperative logging only
+    trials: int = 1
+    # Built-in scorer toggles (off by default for zero overhead unless enabled)
+    use_valid_json_scorer: bool = False
+    use_openai_moderation_scorer: bool = False
+    use_embedding_similarity_scorer: bool = False
+    embedding_model_id: str | None = None  # e.g. "openai/text-embedding-3-small"
+
+
+@dataclass
 class MiddlewareConfig:
     factory: Factory | None = None
     params: Dict[str, Any] = field(default_factory=dict)
@@ -105,6 +151,9 @@ class StruktConfig:
     extras: ExtrasConfig = field(default_factory=ExtrasConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
     weave: WeaveConfig = field(default_factory=WeaveConfig)
+    opentelemetry: OpenTelemetryConfig = field(default_factory=OpenTelemetryConfig)
+    tracing: TracingConfig = field(default_factory=TracingConfig)
+    evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     middleware: List[MiddlewareConfig] = field(default_factory=list)
 
 
@@ -165,6 +214,30 @@ def _coerce_weave_config(value: Any) -> WeaveConfig:
     return WeaveConfig()
 
 
+def _coerce_opentelemetry_config(value: Any) -> OpenTelemetryConfig:
+    if isinstance(value, OpenTelemetryConfig):
+        return value
+    if isinstance(value, dict):
+        return OpenTelemetryConfig(**value)
+    return OpenTelemetryConfig()
+
+
+def _coerce_tracing_config(value: Any) -> TracingConfig:
+    if isinstance(value, TracingConfig):
+        return value
+    if isinstance(value, dict):
+        return TracingConfig(**value)
+    return TracingConfig()
+
+
+def _coerce_evaluation_config(value: Any) -> EvaluationConfig:
+    if isinstance(value, EvaluationConfig):
+        return value
+    if isinstance(value, dict):
+        return EvaluationConfig(**value)
+    return EvaluationConfig()
+
+
 def ensure_config_types(config: StruktConfig) -> StruktConfig:
     """Normalize a `StruktConfig` instance so all nested fields are dataclasses.
 
@@ -214,6 +287,12 @@ def ensure_config_types(config: StruktConfig) -> StruktConfig:
         config.mcp = MCPConfig()
     # Coerce weave config
     config.weave = _coerce_weave_config(getattr(config, "weave", None))
+    # Coerce OpenTelemetry/tracing/evaluation configs
+    config.opentelemetry = _coerce_opentelemetry_config(
+        getattr(config, "opentelemetry", None)
+    )
+    config.tracing = _coerce_tracing_config(getattr(config, "tracing", None))
+    config.evaluation = _coerce_evaluation_config(getattr(config, "evaluation", None))
     # Normalize middleware list
     config.middleware = _coerce_middleware_list(getattr(config, "middleware", []))
     return config

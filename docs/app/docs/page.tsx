@@ -806,11 +806,34 @@ log.info("Hello logs")
 
       <section id="weave-logging" className="section">
         <h3 className="text-xl font-semibold">Weave Logging Integration</h3>
-        <p>StruktX includes comprehensive Weave logging integration for detailed operation tracking, performance monitoring, and debugging. Weave automatically tracks all LLM calls, handler executions, memory operations, and system activities.</p>
+        <p>StruktX includes comprehensive Weave and OpenTelemetry integration for detailed operation tracking, performance monitoring, and debugging. The system creates a unified trace tree where all operations, including background tasks and parallel execution, are nested under a single root trace for complete visibility.</p>
         
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">Unified Trace Tree</span>
+            <span>All operations appear as a single, deeply nested trace with no separate top-level entries</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Custom Trace Naming</span>
+            <span>Configurable trace names in format <code>userID-unitID-threadID-timestamp</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Background Task Nesting</span>
+            <span>Background tasks execute within the original trace context, even across threads</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">OpenTelemetry Export</span>
+            <span>Exclusively exports to Weave's OTLP endpoint for unified observability</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Auto-Instrumentation</span>
+            <span>Automatically instruments OpenAI SDK calls and StruktX components</span>
+          </div>
+        </div>
+
         <h4 className="text-lg font-semibold mt-6">Configuration</h4>
         <p>Enable Weave logging in your StruktX configuration:</p>
-        <CodeBlock className="code-block" language="python" filename="weave_config.py" showExample={true} code={`from strukt import StruktConfig, WeaveConfig
+        <CodeBlock className="code-block" language="python" filename="weave_config.py" showExample={true} code={`from strukt import StruktConfig, WeaveConfig, TracingConfig, OpenTelemetryConfig
 
 config = StruktConfig(
     # ... other config
@@ -818,9 +841,18 @@ config = StruktConfig(
         enabled=True,
         project_name="my-ai-app",  # Or use PROJECT_NAME env var
         environment="development",  # Or use CURRENT_ENV env var
-        api_key_env="WANDB_API_KEY",  # Environment variable for Weave API key
-        auto_track_operations=True,  # Automatically track operations
-        track_user_context=True      # Track user context when available
+        api_key_env="WANDB_API_KEY"  # Environment variable for Weave API key
+    ),
+    tracing=TracingConfig(
+        component_label="StruktX",  # Customize component name (default: "Engine")
+        collapse_status_ops=True,   # Collapse status operations into attributes
+        enable_middleware_tracing=False  # Optional middleware tracing
+    ),
+    opentelemetry=OpenTelemetryConfig(
+        enabled=True,
+        project_id="my-project",
+        api_key_env="WANDB_API_KEY",
+        use_openai_instrumentation=True  # Auto-instrument OpenAI SDK calls
     )
 )
 `} />
@@ -832,77 +864,112 @@ export PROJECT_NAME="my-project"        # Optional, defaults to "struktx"
 export CURRENT_ENV="production"         # Optional, defaults to "development"
 `} />
 
+        <h4 className="text-lg font-semibold mt-6">Unified Trace Architecture</h4>
+        <p>The system creates a single root trace session that contains all operations:</p>
+        <CodeBlock className="code-block" language="text" filename="trace_structure.txt" showExample={true} code={`StruktX.run(user123) [userID-unitID-threadID-timestamp]
+├── StruktX.Engine.classify
+├── StruktX.Engine._execute_grouped_handlers
+│   ├── StruktX.Handler.handle (parallel)
+│   └── BackgroundTask.device_control
+│       └── StruktX.Handler.handle (background thread)
+├── StruktX.LLMClient.invoke
+└── StruktX.Engine.log_post_run_evaluation
+`} />
+
         <h4 className="text-lg font-semibold mt-6">Automatic Operation Tracking</h4>
         <p>When enabled, Weave automatically tracks:</p>
         <div className="concept-list">
           <div className="concept-list-item">
+            <span className="concept-badge">Root Session</span>
+            <span>Custom-named trace containing all operations (e.g., <code>user123-unit456-thread789-1234567890</code>)</span>
+          </div>
+          <div className="concept-list-item">
             <span className="concept-badge">Engine Operations</span>
-            <span><code>engine_run_start/complete</code>, <code>query_classification</code>, <code>grouped_handlers_start/complete</code></span>
+            <span><code>Engine.run</code>, <code>classify</code>, <code>execute_grouped_handlers</code>, <code>execute_handlers_parallel</code></span>
           </div>
           <div className="concept-list-item">
             <span className="concept-badge">LLM Operations</span>
-            <span><code>simple_llm_client.invoke/structured</code>, <code>memory_augmented_llm_client.invoke</code></span>
+            <span>All OpenAI SDK calls via auto-instrumentation, plus StruktX LLM client calls</span>
           </div>
           <div className="concept-list-item">
             <span className="concept-badge">Handler Operations</span>
-            <span><code>handler_execution</code>, <code>general_handler.handle</code></span>
-          </div>
-          <div className="concept-list-item">
-            <span className="concept-badge">Memory Operations</span>
-            <span><code>memory_retrieval</code>, <code>memory_injection</code></span>
+            <span>Individual handler executions with inputs/outputs captured</span>
           </div>
           <div className="concept-list-item">
             <span className="concept-badge">Background Tasks</span>
-            <span><code>background_task_created</code>, <code>parallel_execution_start/complete</code></span>
+            <span><code>BackgroundTask.execute</code> nested within the original trace, including results</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Memory Operations</span>
+            <span>Memory retrieval and injection with scoped context</span>
           </div>
           <div className="concept-list-item">
             <span className="concept-badge">Performance Metrics</span>
-            <span>Execution times, throughput, success/failure rates</span>
+            <span>Execution times, success/failure rates, parallel execution timing</span>
           </div>
           <div className="concept-list-item">
             <span className="concept-badge">Error Tracking</span>
-            <span>Error types, messages, context, stack traces</span>
-          </div>
-          <div className="concept-list-item">
-            <span className="concept-badge">User Context</span>
-            <span>When <code>track_user_context=True</code>, automatically extracts <code>user_id</code>, <code>unit_id</code>, and <code>unit_name</code> from operation context</span>
+            <span>Comprehensive error context with trace correlation</span>
           </div>
         </div>
 
-        <h4 className="text-lg font-semibold mt-6">Automatic User Context Tracking</h4>
-        <p>When <code>track_user_context=True</code> in your WeaveConfig, StruktX automatically extracts <code>user_id</code>, <code>unit_id</code>, and <code>unit_name</code> from the context of every operation:</p>
-        <CodeBlock className="code-block" language="python" filename="auto_context.py" showExample={true} code={`# With track_user_context=True, this automatically tracks user context
+        <h4 className="text-lg font-semibold mt-6">Custom Trace Naming</h4>
+        <p>StruktX automatically generates meaningful trace names using context information:</p>
+        <CodeBlock className="code-block" language="python" filename="trace_naming.py" showExample={true} code={`# Context provided in invoke call
 response = ai.invoke(
-    "What's the weather like today?", 
+    "Turn on the living room lights", 
     context={
         "user_id": "user123",
         "unit_id": "apartment456", 
-        "unit_name": "Sunset Apartments"
+        "thread_id": "session_789"  # Optional, UUID generated if missing
     }
 )
-# All operations within this call are automatically tagged with user context in Weave
+# Creates trace: user123-apartment456-session_789-1234567890
 `} />
-        
-        <h5 className="concept-badge mt-4">Enhanced Operation Names</h5>
-        <p>Operation names now include user context for better traceability:</p>
-        <div className="concept-list">
-          <div className="concept-list-item">
-            <span className="concept-badge">Engine Operations</span>
-            <span><code>engine_run_start[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
-          </div>
-          <div className="concept-list-item">
-            <span className="concept-badge">Classification</span>
-            <span><code>query_classification[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
-          </div>
-          <div className="concept-list-item">
-            <span className="concept-badge">LLM Operations</span>
-            <span><code>simple_llm_client.invoke[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
-          </div>
-          <div className="concept-list-item">
-            <span className="concept-badge">Handler Operations</span>
-            <span><code>general_handler.handle[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
-          </div>
-        </div>
+
+        <h4 className="text-lg font-semibold mt-6">Component Label Customization</h4>
+        <p>Customize the component label shown in traces:</p>
+        <CodeBlock className="code-block" language="python" filename="component_label.py" showExample={true} code={`config = StruktConfig(
+    tracing=TracingConfig(
+        component_label="StruktX"  # Changes "Engine.run(user123)" to "StruktX.run(user123)"
+    )
+)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Background Task Integration</h4>
+        <p>Background tasks are automatically nested within the original trace:</p>
+        <CodeBlock className="code-block" language="python" filename="background_integration.py" showExample={true} code={`# Main request creates root trace
+response = ai.invoke("Control bedroom AC", context={"user_id": "user123"})
+
+# Background task appears nested in Weave:
+# StruktX.run(user123)
+# └── BackgroundTask.device_control
+#     ├── Input: {task_id, query_type, parts, user_id}
+#     └── Output: {status: "completed", result: {...}}
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">OpenTelemetry Integration</h4>
+        <p>StruktX exports all traces to Weave via OpenTelemetry Protocol (OTLP):</p>
+        <CodeBlock className="code-block" language="python" filename="otel_config.py" showExample={true} code={`config = StruktConfig(
+    opentelemetry=OpenTelemetryConfig(
+        enabled=True,
+        project_id="my-project",
+        api_key_env="WANDB_API_KEY",
+        export_endpoint="https://trace.wandb.ai/otel/v1/traces",  # Optional, auto-detected
+        use_openai_instrumentation=True  # Auto-instrument OpenAI SDK calls
+    )
+)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Advanced Configuration</h4>
+        <CodeBlock className="code-block" language="python" filename="advanced_config.py" showExample={true} code={`config = StruktConfig(
+    tracing=TracingConfig(
+        component_label="MyApp",           # Custom component name
+        collapse_status_ops=True,         # Collapse status events into attributes  
+        enable_middleware_tracing=False   # Optional middleware operation tracing
+    )
+)
+`} />
 
         <h4 className="text-lg font-semibold mt-6">User Context Tracking</h4>
         <p>Track operations with user context using the <code>weave_context</code> method. You can provide context in multiple ways:</p>

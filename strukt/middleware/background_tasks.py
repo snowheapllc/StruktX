@@ -14,6 +14,7 @@ from datetime import datetime
 from strukt.middleware import Middleware
 from strukt.types import HandlerResult, InvocationState, BackgroundTaskInfo
 from strukt.logging import get_logger
+from strukt.tracing import strukt_trace, unified_trace_context
 
 
 class TaskStatus(Enum):
@@ -71,7 +72,13 @@ class BackgroundTaskMiddleware(Middleware):
 
         # Task management
         self._tasks: Dict[str, BackgroundTask] = {}
-        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        # Prefer Weave's ThreadPoolExecutor to propagate trace context across threads
+        try:
+            import weave  # type: ignore
+
+            self._executor = weave.ThreadPoolExecutor(max_workers=max_workers)
+        except Exception:
+            self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._lock = threading.Lock()
 
         # Background thread for cleanup
@@ -238,6 +245,14 @@ class BackgroundTaskMiddleware(Middleware):
         """Create a new background task."""
         task_id = str(uuid.uuid4())
 
+        # Capture current trace context to pass to background thread
+        current_thread_id = None
+        try:
+            ctx = getattr(state, "context", {}) or {}
+            current_thread_id = ctx.get("thread_id") or ctx.get("session_id")
+        except Exception:
+            current_thread_id = None
+
         task = BackgroundTask(
             task_id=task_id,
             handler_name=query_type,
@@ -248,6 +263,7 @@ class BackgroundTaskMiddleware(Middleware):
                 "query_type": query_type,
                 "parts": parts,
                 "original_state": state,
+                "parent_thread_id": current_thread_id,  # Store parent thread context
             },
         )
 
@@ -262,6 +278,7 @@ class BackgroundTaskMiddleware(Middleware):
             query_type,
             parts,
             state,
+            current_thread_id,  # Pass parent thread context
         )
         task.future = future
 
@@ -270,6 +287,10 @@ class BackgroundTaskMiddleware(Middleware):
         )
         return task_id
 
+    @strukt_trace(
+        name="StruktX.BackgroundTask.execute",
+        call_display_name="BackgroundTask.execute",
+    )
     def _execute_background_task(
         self,
         task_id: str,
@@ -277,11 +298,12 @@ class BackgroundTaskMiddleware(Middleware):
         query_type: str,
         parts: List[str],
         state: InvocationState,
-    ) -> None:
+        parent_thread_id: str = None,
+    ) -> dict:
         """Execute a task in the background."""
         with self._lock:
             if task_id not in self._tasks:
-                return
+                return {"error": "Task not found", "task_id": task_id}
             task = self._tasks[task_id]
             task.status = TaskStatus.RUNNING
             task.started_at = datetime.now()
@@ -296,8 +318,19 @@ class BackgroundTaskMiddleware(Middleware):
                 if task_id in self._tasks:
                     self._tasks[task_id].progress = 0.1
 
-            # Execute the actual handler
-            result = handler.handle(state, parts)
+            # Use the parent thread context to ensure nesting under main trace
+            thread_id = parent_thread_id
+            if not thread_id:
+                try:
+                    ctx = getattr(state, "context", {}) or {}
+                    thread_id = ctx.get("thread_id") or ctx.get("session_id")
+                except Exception:
+                    thread_id = None
+
+            # Execute the actual handler within the parent trace context
+            # This ensures the background task appears nested under the main Engine.run
+            with unified_trace_context(thread_id, f"BackgroundTask.{query_type}"):
+                result = handler.handle(state, parts)
 
             # Update progress to indicate completion
             with self._lock:
@@ -312,16 +345,44 @@ class BackgroundTaskMiddleware(Middleware):
                 f"[BACKGROUND TASK] Task {task_id} completed successfully for '{query_type}'"
             )
 
+            # Return the result for tracing capture
+            result_dict = (
+                result.__dict__ if hasattr(result, "__dict__") else str(result)
+            )
+            return {
+                "task_id": task_id,
+                "query_type": query_type,
+                "status": "completed",
+                "result": result_dict,
+                "parts": parts,
+                "user_id": state.context.get("user_id")
+                if hasattr(state, "context")
+                else None,
+            }
+
         except Exception as e:
             self._log.error(
                 f"[BACKGROUND TASK] Task {task_id} failed for '{query_type}': {e}"
             )
+
             with self._lock:
                 if task_id in self._tasks:
                     task = self._tasks[task_id]
                     task.status = TaskStatus.FAILED
                     task.completed_at = datetime.now()
                     task.error = str(e)
+
+            # Return the error for tracing capture
+            return {
+                "task_id": task_id,
+                "query_type": query_type,
+                "status": "failed",
+                "error": str(e),
+                "parts": parts,
+                "user_id": state.context.get("user_id")
+                if hasattr(state, "context")
+                else None,
+            }
 
     def get_task(self, task_id: str) -> Optional[BackgroundTask]:
         """Get a specific task by ID."""

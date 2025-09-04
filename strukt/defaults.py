@@ -123,33 +123,24 @@ class UniversalLLMLogger(LLMClient):
             import weave
             import time
 
-            # Create contextual operation name
-            base_op_name = f"StruktX.LLM.Universal.{operation}"
-            contextual_name = self._create_contextual_operation_name(
-                base_op_name, context
-            )
-
             # Safely serialize output for JSON compatibility
             safe_output = self._safe_serialize_output(output)
 
-            # Prepare attributes
+            # Prepare attributes - these will be attached to the current call
             attributes = {
-                "wrapper": "UniversalLLMLogger",
-                "wrapped_type": type(self._base).__name__,
-                "operation": operation,
-                "context": self._safe_context(context),
-                "timestamp": time.time(),
-                "inputs": inputs,
-                "output": safe_output,
+                "llm.wrapper": "UniversalLLMLogger",
+                "llm.wrapped_type": type(self._base).__name__,
+                "llm.operation": operation,
+                "llm.context": self._safe_context(context),
+                "llm.timestamp": time.time(),
+                "llm.inputs": inputs,
+                "llm.output": safe_output,
             }
 
-            # Create Weave operation
-            @weave.op(name=base_op_name, call_display_name=contextual_name)
-            def _log_llm_operation(attrs: dict) -> dict:
-                return attrs
-
+            # Add attributes to current trace
             with weave.attributes(attributes):
-                _log_llm_operation(attributes)
+                # Attributes are attached to the current call
+                self._logger.debug(f"LLM operation {operation} logged")
 
         except Exception as e:
             self._logger.warn(f"Failed to log LLM operation {operation}: {e}")
@@ -660,61 +651,7 @@ class SimpleClassifier(Classifier):
         return base_name
 
     def classify(self, state: InvocationState) -> QueryClassification:
-        # Log classification with Weave if available
-        if self._weave_available:
-            try:
-                import weave
-                import time
-
-                start_time = time.time()
-
-                # Extract user context from state for contextual operation names
-                user_context = {}
-                if hasattr(state, "context") and state.context:
-                    if "user_id" in state.context:
-                        user_context["user_id"] = state.context["user_id"]
-                    if "unit_id" in state.context:
-                        user_context["unit_id"] = state.context["unit_id"]
-                    if "unit_name" in state.context:
-                        user_context["unit_name"] = state.context["unit_name"]
-
-                # Create contextual operation name
-                base_operation = "simple_classifier.classify"
-                contextual_operation = self._create_contextual_operation_name(
-                    base_operation, user_context
-                )
-
-                with weave.attributes(
-                    {
-                        "classifier_type": "simple_classifier",
-                        "operation": "classify",
-                        "contextual_operation_name": contextual_operation,
-                        "input_text": state.text,
-                        "input_context": state.context,
-                        "timestamp": start_time,
-                    }
-                ):
-                    # Execute classification
-                    result = QueryClassification(
-                        query_types=[StruktQueryEnum.GENERAL],
-                        confidences=[1.0],
-                        parts=[state.text],
-                    )
-
-                    # Log completion
-                    duration = time.time() - start_time
-                    self._logger.debug(
-                        f"SimpleClassifier classify completed in {duration:.3f}s"
-                    )
-
-                    return result
-
-            except Exception as e:
-                self._logger.warn(f"Failed to log Weave operation: {e}")
-                # Fallback to original implementation
-                pass
-
-        # Fallback implementation without Weave logging
+        """Simple classification - always returns GENERAL."""
         return QueryClassification(
             query_types=[StruktQueryEnum.GENERAL], confidences=[1.0], parts=[state.text]
         )
@@ -762,62 +699,9 @@ class GeneralHandler(Handler):
         return base_name
 
     def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
+        """Handle general queries."""
         # Preserve the user's full question for general responses
         text = state.text
-
-        # Log handler execution with Weave if available
-        if self._weave_available:
-            try:
-                import weave
-                import time
-
-                start_time = time.time()
-
-                # Extract user context from state for contextual operation names
-                user_context = {}
-                if hasattr(state, "context") and state.context:
-                    if "user_id" in state.context:
-                        user_context["user_id"] = state.context["user_id"]
-                    if "unit_id" in state.context:
-                        user_context["unit_id"] = state.context["unit_id"]
-                    if "unit_name" in state.context:
-                        user_context["unit_name"] = state.context["unit_name"]
-
-                # Create contextual operation name
-                base_operation = "general_handler.handle"
-                contextual_operation = self._create_contextual_operation_name(
-                    base_operation, user_context
-                )
-
-                with weave.attributes(
-                    {
-                        "handler_type": "general_handler",
-                        "operation": "handle",
-                        "contextual_operation_name": contextual_operation,
-                        "input_text": text,
-                        "input_parts": parts,
-                        "input_context": state.context,
-                        "has_custom_prompt": self._prompt is not None,
-                        "timestamp": start_time,
-                    }
-                ):
-                    # Execute handler logic
-                    result = self._execute_handle_logic(state, parts, text)
-
-                    # Log completion
-                    duration = time.time() - start_time
-                    self._logger.debug(
-                        f"GeneralHandler handle completed in {duration:.3f}s"
-                    )
-
-                    return result
-
-            except Exception as e:
-                self._logger.warn(f"Failed to log Weave operation: {e}")
-                # Fallback to original implementation
-                pass
-
-        # Fallback implementation without Weave logging
         return self._execute_handle_logic(state, parts, text)
 
     def _execute_handle_logic(

@@ -547,14 +547,23 @@ Augmented memory injections appear under the `memory` logger with the provided `
 
 ### Weave Logging Integration
 
-StruktX includes comprehensive Weave logging integration for detailed operation tracking, performance monitoring, and debugging. Weave automatically tracks all LLM calls, handler executions, memory operations, and system activities.
+StruktX includes comprehensive Weave and OpenTelemetry integration for detailed operation tracking, performance monitoring, and debugging. The system creates a unified trace tree where all operations, including background tasks and parallel execution, are nested under a single root trace for complete visibility.
+
+#### Key Features
+
+- **Unified Trace Tree**: All operations appear as a single, deeply nested trace with no separate top-level entries
+- **Custom Trace Naming**: Configurable trace names in format `userID-unitID-threadID-timestamp`
+- **Background Task Nesting**: Background tasks execute within the original trace context, even across threads
+- **OpenTelemetry Export**: Exclusively exports to Weave's OTLP endpoint for unified observability
+- **Auto-Instrumentation**: Automatically instruments OpenAI SDK calls and StruktX components
+- **Component Label Customization**: Configure display names (e.g., change "Engine.run" to "StruktX.run")
 
 #### Configuration
 
 Enable Weave logging in your StruktX configuration:
 
 ```python
-from strukt import StruktConfig, WeaveConfig
+from strukt import StruktConfig, WeaveConfig, TracingConfig, OpenTelemetryConfig
 
 config = StruktConfig(
     # ... other config
@@ -562,9 +571,18 @@ config = StruktConfig(
         enabled=True,
         project_name="my-ai-app",  # Or use PROJECT_NAME env var
         environment="development",  # Or use CURRENT_ENV env var
-        api_key_env="WANDB_API_KEY",  # Environment variable for Weave API key
-        auto_track_operations=True,  # Automatically track operations
-        track_user_context=True      # Track user context when available
+        api_key_env="WANDB_API_KEY"  # Environment variable for Weave API key
+    ),
+    tracing=TracingConfig(
+        component_label="StruktX",  # Customize component name (default: "Engine")
+        collapse_status_ops=True,   # Collapse status operations into attributes
+        enable_middleware_tracing=False  # Optional middleware tracing
+    ),
+    opentelemetry=OpenTelemetryConfig(
+        enabled=True,
+        project_id="my-project",
+        api_key_env="WANDB_API_KEY",
+        use_openai_instrumentation=True  # Auto-instrument OpenAI SDK calls
     )
 )
 ```
@@ -579,45 +597,109 @@ export PROJECT_NAME="my-project"        # Optional, defaults to "struktx"
 export CURRENT_ENV="production"         # Optional, defaults to "development"
 ```
 
+#### Unified Trace Architecture
+
+The system creates a single root trace session that contains all operations:
+
+```
+StruktX.run(user123) [userID-unitID-threadID-timestamp]
+├── StruktX.Engine.classify
+├── StruktX.Engine._execute_grouped_handlers
+│   ├── StruktX.Handler.handle (parallel)
+│   └── BackgroundTask.device_control
+│       └── StruktX.Handler.handle (background thread)
+├── StruktX.LLMClient.invoke
+└── StruktX.Engine.log_post_run_evaluation
+```
+
 #### Automatic Operation Tracking
 
 When enabled, Weave automatically tracks:
 
-- **Engine Operations**: `engine_run_start/complete`, `query_classification`, `grouped_handlers_start/complete`
-- **LLM Operations**: `simple_llm_client.invoke/structured`, `memory_augmented_llm_client.invoke`
-- **Handler Operations**: `handler_execution`, `general_handler.handle`
-- **Memory Operations**: `memory_retrieval`, `memory_injection`
-- **Background Tasks**: `background_task_created`, `parallel_execution_start/complete`
-- **Performance Metrics**: Execution times, throughput, success/failure rates
-- **Error Tracking**: Error types, messages, context, stack traces
-- **User Context**: When `track_user_context=True`, automatically extracts `user_id`, `unit_id`, and `unit_name` from operation context
+- **Root Session**: Custom-named trace containing all operations (e.g., `user123-unit456-thread789-1234567890`)
+- **Engine Operations**: `Engine.run`, `classify`, `execute_grouped_handlers`, `execute_handlers_parallel`
+- **LLM Operations**: All OpenAI SDK calls via auto-instrumentation, plus StruktX LLM client calls
+- **Handler Operations**: Individual handler executions with inputs/outputs captured
+- **Background Tasks**: `BackgroundTask.execute` nested within the original trace, including results
+- **Memory Operations**: Memory retrieval and injection with scoped context
+- **Performance Metrics**: Execution times, success/failure rates, parallel execution timing
+- **Error Tracking**: Comprehensive error context with trace correlation
 
-#### Automatic User Context Tracking
+#### Custom Trace Naming
 
-When `track_user_context=True` in your WeaveConfig, StruktX automatically extracts `user_id`, `unit_id`, and `unit_name` from the context of every operation:
+StruktX automatically generates meaningful trace names using context information:
 
 ```python
-# With track_user_context=True, this automatically tracks user context
+# Context provided in invoke call
 response = ai.invoke(
-    "What's the weather like today?", 
+    "Turn on the living room lights", 
     context={
         "user_id": "user123",
         "unit_id": "apartment456", 
-        "unit_name": "Sunset Apartments"
+        "thread_id": "session_789"  # Optional, UUID generated if missing
     }
 )
-# All operations within this call are automatically tagged with user context in Weave
+# Creates trace: user123-apartment456-session_789-1234567890
 ```
 
-**Enhanced Operation Names**: Operation names now include user context for better traceability:
-- `engine_run_start[user:user123,unit:apartment456,apt:Sunset_Apartments]`
-- `query_classification[user:user123,unit:apartment456,apt:Sunset_Apartments]`
-- `simple_llm_client.invoke[user:user123,unit:apartment456,apt:Sunset_Apartments]`
-- `general_handler.handle[user:user123,unit:apartment456,apt:Sunset_Apartments]`
+#### Component Label Customization
+
+Customize the component label shown in traces:
+
+```python
+config = StruktConfig(
+    tracing=TracingConfig(
+        component_label="StruktX"  # Changes "Engine.run(user123)" to "StruktX.run(user123)"
+    )
+)
+```
+
+#### Background Task Integration
+
+Background tasks are automatically nested within the original trace:
+
+```python
+# Main request creates root trace
+response = ai.invoke("Control bedroom AC", context={"user_id": "user123"})
+
+# Background task appears nested in Weave:
+# StruktX.run(user123)
+# └── BackgroundTask.device_control
+#     ├── Input: {task_id, query_type, parts, user_id}
+#     └── Output: {status: "completed", result: {...}}
+```
+
+#### OpenTelemetry Integration
+
+StruktX exports all traces to Weave via OpenTelemetry Protocol (OTLP):
+
+```python
+config = StruktConfig(
+    opentelemetry=OpenTelemetryConfig(
+        enabled=True,
+        project_id="my-project",
+        api_key_env="WANDB_API_KEY",
+        export_endpoint="https://trace.wandb.ai/otel/v1/traces",  # Optional, auto-detected
+        use_openai_instrumentation=True  # Auto-instrument OpenAI SDK calls
+    )
+)
+```
+
+#### Advanced Configuration
+
+```python
+config = StruktConfig(
+    tracing=TracingConfig(
+        component_label="MyApp",           # Custom component name
+        collapse_status_ops=True,         # Collapse status events into attributes  
+        enable_middleware_tracing=False   # Optional middleware operation tracing
+    )
+)
+```
 
 #### Manual User Context Tracking
 
-For more control, you can still use the `weave_context` method. You can provide context in multiple ways:
+For advanced use cases, you can still use the `weave_context` method:
 
 **Explicit values:**
 ```python
