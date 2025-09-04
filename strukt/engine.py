@@ -64,6 +64,8 @@ class Engine:
 
         if self._weave_available:
             self._logger.info("Engine initialized with Weave logging enabled")
+            # Apply dynamic tracing decorators with component label
+            self._apply_dynamic_tracing()
         else:
             self._logger.info("Engine initialized without Weave logging")
 
@@ -230,7 +232,49 @@ class Engine:
                 f"memory_{operation}", memory_type=type(self._memory).__name__, **kwargs
             )
 
-    @strukt_trace(name="StruktX.Engine.run", call_display_name=None)
+    def _get_component_label(self) -> str:
+        """Get the component label from tracing config, defaulting to 'Engine'."""
+        try:
+            if self._tracing_config is not None:
+                return (
+                    getattr(self._tracing_config, "component_label", "Engine")
+                    or "Engine"
+                )
+        except Exception:
+            pass
+        return "Engine"
+
+    def _apply_dynamic_tracing(self):
+        """Apply tracing decorators dynamically with the correct component label."""
+        try:
+            component_label = self._get_component_label()
+
+            # Apply tracing to key methods with dynamic component label
+            self.run = strukt_trace(name="StruktX.Engine.run")(self.run)
+
+            self._classify = strukt_trace(
+                name="StruktX.Engine.classify",
+                call_display_name=f"{component_label}.classify",
+            )(self._classify)
+
+            self._execute_grouped_handlers = strukt_trace(
+                name="StruktX.Engine.execute_grouped_handlers",
+                call_display_name=f"{component_label}.execute_grouped_handlers",
+            )(self._execute_grouped_handlers)
+
+            self._execute_handlers_parallel = strukt_trace(
+                name="StruktX.Engine.execute_handlers_parallel",
+                call_display_name=f"{component_label}.execute_handlers_parallel",
+            )(self._execute_handlers_parallel)
+
+            self._execute_single_handler = strukt_trace(
+                name="StruktX.Engine.execute_single_handler",
+                call_display_name=f"{component_label}.execute_single_handler",
+            )(self._execute_single_handler)
+
+        except Exception as e:
+            self._logger.debug(f"Failed to apply dynamic tracing: {e}")
+
     def run(self, state: InvocationState) -> List[HandlerResult]:
         """Main engine run method - all operations will be nested under this call."""
         # Determine thread/session id for grouping
@@ -246,16 +290,8 @@ class Engine:
         # Generate custom trace name using userID-unitID-threadID-timestamp format
         custom_trace_name = generate_trace_name(user_context)
 
-        # Compute display label for root op from tracing config
-        label = "Engine"
-        try:
-            if self._tracing_config is not None:
-                label = (
-                    getattr(self._tracing_config, "component_label", "Engine")
-                    or "Engine"
-                )
-        except Exception:
-            label = "Engine"
+        # Get component label from tracing config
+        label = self._get_component_label()
 
         # Extract user ID or use context for display name
         user_id = user_context.get("user_id") if user_context else None
@@ -402,7 +438,6 @@ class Engine:
             self._logger.error(f"Engine run failed: {e}")
             raise
 
-    @strukt_trace(name="StruktX.Engine.classify", call_display_name="Engine.classify")
     def _classify(
         self, state: InvocationState, user_context: dict = None
     ) -> tuple[InvocationState, QueryClassification]:
@@ -443,10 +478,6 @@ class Engine:
             grouped[qtype].append(part)
         return grouped
 
-    @strukt_trace(
-        name="StruktX.Engine.execute_grouped_handlers",
-        call_display_name="Engine.execute_grouped_handlers",
-    )
     def _execute_grouped_handlers(
         self,
         state: InvocationState,
@@ -534,10 +565,6 @@ class Engine:
             )
             results.extend(parallel_results)
 
-    @strukt_trace(
-        name="StruktX.Engine.execute_handlers_parallel",
-        call_display_name="Engine.execute_handlers_parallel",
-    )
     def _execute_handlers_parallel(
         self,
         state: InvocationState,
@@ -655,10 +682,6 @@ class Engine:
                         error_type=type(e).__name__,
                     )
 
-    @strukt_trace(
-        name="StruktX.Engine.execute_single_handler",
-        call_display_name="Engine.execute_single_handler",
-    )
     def _execute_single_handler(
         self,
         state: InvocationState,

@@ -340,7 +340,6 @@ def auto_instrument_struktx():
         return
 
     try:
-
         # Try to import modules, but don't fail if they're not available
         try:
             from . import interfaces
@@ -385,7 +384,6 @@ def auto_instrument_struktx():
 def _instrument_class_methods(cls, prefix: str):
     """Instrument all methods of a class with unified tracing."""
     try:
-
         # Get all methods to instrument
         methods_to_trace = []
         try:
