@@ -57,7 +57,9 @@ class StruktLogger:
             # Check if WANDB_API_KEY is available
             api_key = os.getenv("WANDB_API_KEY")
             if not api_key:
-                self.warn("WANDB_API_KEY environment variable not set - Weave logging disabled")
+                self.warn(
+                    "WANDB_API_KEY environment variable not set - Weave logging disabled"
+                )
                 return
 
             # Get project name and environment from parameters or environment variables
@@ -71,14 +73,17 @@ class StruktLogger:
             # Initialize Weave with the project - disable autopatching to prevent LangChain noise
             weave.init(
                 project_name=f"{self._weave_project_name}-{self._weave_environment}",
-                autopatch_settings={"disable_autopatch": True}
+                autopatch_settings={"disable_autopatch": True},
             )
             # Update global state
-            global _global_weave_initialized, _global_weave_project_name, _global_weave_environment
+            global \
+                _global_weave_initialized, \
+                _global_weave_project_name, \
+                _global_weave_environment
             _global_weave_initialized = True
             _global_weave_project_name = self._weave_project_name
             _global_weave_environment = self._weave_environment
-            
+
             # Update instance state
             self._weave_initialized = True
             self.info(
@@ -90,6 +95,7 @@ class StruktLogger:
         except Exception as e:
             self.warn(f"Failed to initialize Weave: {e}")
             import traceback
+
             self.warn(f"Weave init traceback: {traceback.format_exc()}")
 
     def init_weave(
@@ -109,14 +115,14 @@ class StruktLogger:
 
     @contextlib.contextmanager
     def weave_context(
-        self, 
-        user_id: Optional[str] = None, 
-        unit_id: Optional[str] = None, 
+        self,
+        user_id: Optional[str] = None,
+        unit_id: Optional[str] = None,
         unit_name: Optional[str] = None,
-        context: Optional[dict] = None
+        context: Optional[dict] = None,
     ):
         """Context manager for Weave logging with user context.
-        
+
         Args:
             user_id: Explicit user ID (takes precedence over context)
             unit_id: Explicit unit ID (takes precedence over context)
@@ -133,7 +139,9 @@ class StruktLogger:
             # Extract values from context if not explicitly provided
             final_user_id = user_id or (context.get("user_id") if context else None)
             final_unit_id = unit_id or (context.get("unit_id") if context else None)
-            final_unit_name = unit_name or (context.get("unit_name") if context else None)
+            final_unit_name = unit_name or (
+                context.get("unit_name") if context else None
+            )
 
             # Build attributes dictionary, only including non-None values
             attributes = {}
@@ -158,11 +166,11 @@ class StruktLogger:
     @contextlib.contextmanager
     def weave_context_from_state(self, state):
         """Context manager that automatically extracts user context from InvocationState.
-        
+
         Args:
             state: InvocationState object containing context information
         """
-        context = getattr(state, 'context', {}) if state else {}
+        context = getattr(state, "context", {}) if state else {}
         with self.weave_context(context=context):
             yield
 

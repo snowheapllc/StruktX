@@ -123,14 +123,14 @@ class Strukt:
         return logger.create_weave_op(func, name, call_display_name)
 
     def weave_context(
-        self, 
-        user_id: Optional[str] = None, 
-        unit_id: Optional[str] = None, 
+        self,
+        user_id: Optional[str] = None,
+        unit_id: Optional[str] = None,
         unit_name: Optional[str] = None,
-        context: Optional[dict] = None
+        context: Optional[dict] = None,
     ):
         """Context manager for Weave logging with user context.
-        
+
         Args:
             user_id: Explicit user ID (takes precedence over context)
             unit_id: Explicit unit ID (takes precedence over context)
@@ -142,7 +142,7 @@ class Strukt:
 
     def weave_context_from_state(self, state):
         """Context manager that automatically extracts user context from InvocationState.
-        
+
         Args:
             state: InvocationState object containing context information
         """

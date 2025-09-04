@@ -23,31 +23,39 @@ class DateTimeEncoder(_json.JSONEncoder):
         return super().default(obj)
 
 
-
-
 class UniversalLLMLogger(LLMClient):
     """
     Universal wrapper that automatically logs all LLM operations to Weave.
-    
+
     This wrapper intercepts ALL LLM calls (invoke, structured, ainvoke, etc.)
     and captures both the inputs and outputs for comprehensive logging.
     Works with any underlying LLM client implementation.
     """
-    
+
     def __init__(self, base: LLMClient) -> None:
         self._base = base
         self._logger = get_logger("universal-llm-logger")
         self._weave_available = self._logger.is_weave_available()
-    
-    def _create_contextual_operation_name(self, base_name: str, context: dict | None) -> str:
+
+    def _create_contextual_operation_name(
+        self, base_name: str, context: dict | None
+    ) -> str:
         """Create contextual operation name with user info."""
         if not context:
             return base_name
-        
-        user_id = str(context.get("user_id", "")) if isinstance(context.get("user_id"), (str, int)) else ""
-        unit_id = str(context.get("unit_id", "")) if isinstance(context.get("unit_id"), (str, int)) else ""
+
+        user_id = (
+            str(context.get("user_id", ""))
+            if isinstance(context.get("user_id"), (str, int))
+            else ""
+        )
+        unit_id = (
+            str(context.get("unit_id", ""))
+            if isinstance(context.get("unit_id"), (str, int))
+            else ""
+        )
         unit_name = context.get("unit_name")
-        
+
         parts: list[str] = []
         if user_id:
             parts.append(f"user:{user_id}")
@@ -56,33 +64,42 @@ class UniversalLLMLogger(LLMClient):
         if unit_name:
             clean = str(unit_name).replace(" ", "_").replace("-", "_")[:20]
             parts.append(f"apt:{clean}")
-        
+
         return f"{base_name}[{','.join(parts)}]" if parts else base_name
-    
+
     def _safe_context(self, d: dict | None) -> dict:
         """Create safe context dict for logging."""
         if not isinstance(d, dict):
             return {}
         safe = dict(d)
         # Remove potentially large fields that might clutter logs
-        for k in ["input_prompt", "prompt", "messages", "docs", "documents", "timestamp"]:
+        for k in [
+            "input_prompt",
+            "prompt",
+            "messages",
+            "docs",
+            "documents",
+            "timestamp",
+        ]:
             safe.pop(k, None)
         return safe
-    
+
     def _safe_serialize_output(self, output: Any) -> Any:
         """Safely serialize output for JSON compatibility."""
         try:
             # If it's a Pydantic model, use model_dump
-            if hasattr(output, 'model_dump'):
+            if hasattr(output, "model_dump"):
                 return output.model_dump()
-            elif hasattr(output, 'dict'):
+            elif hasattr(output, "dict"):
                 return output.dict()
             # If it's a simple type, return as-is
             elif isinstance(output, (str, int, float, bool, list, dict, type(None))):
                 return output
             # For other objects, try to convert to dict
-            elif hasattr(output, '__dict__'):
-                return {k: v for k, v in output.__dict__.items() if not k.startswith('_')}
+            elif hasattr(output, "__dict__"):
+                return {
+                    k: v for k, v in output.__dict__.items() if not k.startswith("_")
+                }
             # Last resort: convert to string
             else:
                 return str(output)
@@ -90,25 +107,31 @@ class UniversalLLMLogger(LLMClient):
             # If all else fails, return a safe representation
             return {
                 "type": type(output).__name__,
-                "repr": str(output)[:200] + "..." if len(str(output)) > 200 else str(output)
+                "repr": str(output)[:200] + "..."
+                if len(str(output)) > 200
+                else str(output),
             }
-    
-    def _log_llm_call(self, operation: str, inputs: dict, output: Any, context: dict | None = None) -> None:
+
+    def _log_llm_call(
+        self, operation: str, inputs: dict, output: Any, context: dict | None = None
+    ) -> None:
         """Log LLM call to Weave with full context."""
         if not self._weave_available:
             return
-        
+
         try:
             import weave
             import time
-            
+
             # Create contextual operation name
             base_op_name = f"StruktX.LLM.Universal.{operation}"
-            contextual_name = self._create_contextual_operation_name(base_op_name, context)
-            
+            contextual_name = self._create_contextual_operation_name(
+                base_op_name, context
+            )
+
             # Safely serialize output for JSON compatibility
             safe_output = self._safe_serialize_output(output)
-            
+
             # Prepare attributes
             attributes = {
                 "wrapper": "UniversalLLMLogger",
@@ -119,118 +142,134 @@ class UniversalLLMLogger(LLMClient):
                 "inputs": inputs,
                 "output": safe_output,
             }
-            
+
             # Create Weave operation
             @weave.op(name=base_op_name, call_display_name=contextual_name)
             def _log_llm_operation(attrs: dict) -> dict:
                 return attrs
-            
+
             with weave.attributes(attributes):
                 _log_llm_operation(attributes)
-                
+
         except Exception as e:
             self._logger.warn(f"Failed to log LLM operation {operation}: {e}")
-    
+
     def invoke(self, prompt: str, **kwargs: Any) -> Any:
         """Intercept and log invoke calls."""
         # Extract context from kwargs
-        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
-        
+        context = (
+            kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        )
+
         # Prepare inputs for logging
         inputs = {
             "prompt": prompt,
-            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
-        
+
         # Execute the actual LLM call
         result = self._base.invoke(prompt, **kwargs)
-        
+
         # Log the call
         self._log_llm_call("invoke", inputs, result, context)
-        
+
         return result
-    
-    def structured(self, prompt: str, output_model: Type[BaseModel], **kwargs: Any) -> Any:
+
+    def structured(
+        self, prompt: str, output_model: Type[BaseModel], **kwargs: Any
+    ) -> Any:
         """Intercept and log structured calls."""
         # Extract context from kwargs
-        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
-        
+        context = (
+            kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        )
+
         # Prepare inputs for logging - safely serialize output_model
         model_name = "unknown"
         try:
             if hasattr(output_model, "__name__"):
                 model_name = output_model.__name__
-            elif hasattr(output_model, "__class__") and hasattr(output_model.__class__, "__name__"):
+            elif hasattr(output_model, "__class__") and hasattr(
+                output_model.__class__, "__name__"
+            ):
                 model_name = output_model.__class__.__name__
             else:
                 model_name = str(type(output_model).__name__)
         except Exception:
             model_name = "unknown_model"
-        
+
         inputs = {
             "prompt": prompt,
             "output_model": model_name,
-            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
-        
+
         # Execute the actual LLM call
         result = self._base.structured(prompt, output_model, **kwargs)
-        
+
         # Log the call
         self._log_llm_call("structured", inputs, result, context)
-        
+
         return result
-    
+
     async def ainvoke(self, prompt: str, **kwargs: Any) -> Any:
         """Intercept and log async invoke calls."""
         # Extract context from kwargs
-        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
-        
+        context = (
+            kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        )
+
         # Prepare inputs for logging
         inputs = {
             "prompt": prompt,
-            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
-        
+
         # Execute the actual LLM call
         result = await self._base.ainvoke(prompt, **kwargs)
-        
+
         # Log the call
         self._log_llm_call("ainvoke", inputs, result, context)
-        
+
         return result
-    
-    async def astructured(self, prompt: str, output_model: Type[BaseModel], **kwargs: Any) -> Any:
+
+    async def astructured(
+        self, prompt: str, output_model: Type[BaseModel], **kwargs: Any
+    ) -> Any:
         """Intercept and log async structured calls."""
         # Extract context from kwargs
-        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
-        
+        context = (
+            kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        )
+
         # Prepare inputs for logging - safely serialize output_model
         model_name = "unknown"
         try:
             if hasattr(output_model, "__name__"):
                 model_name = output_model.__name__
-            elif hasattr(output_model, "__class__") and hasattr(output_model.__class__, "__name__"):
+            elif hasattr(output_model, "__class__") and hasattr(
+                output_model.__class__, "__name__"
+            ):
                 model_name = output_model.__class__.__name__
             else:
                 model_name = str(type(output_model).__name__)
         except Exception:
             model_name = "unknown_model"
-        
+
         inputs = {
             "prompt": prompt,
             "output_model": model_name,
-            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
-        
+
         # Execute the actual LLM call
         result = await self._base.astructured(prompt, output_model, **kwargs)
-        
+
         # Log the call
         self._log_llm_call("astructured", inputs, result, context)
-        
+
         return result
-    
+
     # Delegate all other attributes to the base client
     def __getattr__(self, name: str) -> Any:
         return getattr(self._base, name)
@@ -443,11 +482,13 @@ class SimpleLLMClient(LLMClient):
         """Simple structured response for development."""
         try:
             # Try to return an empty-but-valid object for common fields
-            return output_model.model_validate({
-                "query_types": [],
-                "confidences": [],
-                "parts": [],
-            })
+            return output_model.model_validate(
+                {
+                    "query_types": [],
+                    "confidences": [],
+                    "parts": [],
+                }
+            )
         except Exception:
             # Fallback for other models
             try:
@@ -550,9 +591,7 @@ class MemoryAugmentedLLMClient(LLMClient):
         if isinstance(kwargs, dict):
             src = kwargs.get("augment_source") or kwargs.get("caller")
 
-        augmented = self._augment(
-            prompt, context=ctx, query_hint=qh, source=src
-        )
+        augmented = self._augment(prompt, context=ctx, query_hint=qh, source=src)
 
         # Remove augmentation-only kwargs before delegating
         clean_kwargs = dict(kwargs)
@@ -592,16 +631,18 @@ class SimpleClassifier(Classifier):
         self._logger = get_logger("simple-classifier")
         self._weave_available = self._logger.is_weave_available()
 
-    def _create_contextual_operation_name(self, base_name: str, user_context: dict = None) -> str:
+    def _create_contextual_operation_name(
+        self, base_name: str, user_context: dict = None
+    ) -> str:
         """Create a contextual operation name that includes user information."""
         if not user_context:
             return base_name
-        
+
         # Extract user identifiers
-        user_id = user_context.get('user_id', '')
-        unit_id = user_context.get('unit_id', '')
-        unit_name = user_context.get('unit_name', '')
-        
+        user_id = user_context.get("user_id", "")
+        unit_id = user_context.get("unit_id", "")
+        unit_name = user_context.get("unit_name", "")
+
         # Build contextual name
         context_parts = []
         if user_id:
@@ -610,12 +651,12 @@ class SimpleClassifier(Classifier):
             context_parts.append(f"unit:{unit_id}")
         if unit_name:
             # Clean unit name for use in operation names
-            clean_unit_name = unit_name.replace(' ', '_').replace('-', '_')[:20]
+            clean_unit_name = unit_name.replace(" ", "_").replace("-", "_")[:20]
             context_parts.append(f"apt:{clean_unit_name}")
-        
+
         if context_parts:
             return f"{base_name}[{','.join(context_parts)}]"
-        
+
         return base_name
 
     def classify(self, state: InvocationState) -> QueryClassification:
@@ -626,20 +667,22 @@ class SimpleClassifier(Classifier):
                 import time
 
                 start_time = time.time()
-                
+
                 # Extract user context from state for contextual operation names
                 user_context = {}
-                if hasattr(state, 'context') and state.context:
-                    if 'user_id' in state.context:
-                        user_context['user_id'] = state.context['user_id']
-                    if 'unit_id' in state.context:
-                        user_context['unit_id'] = state.context['unit_id']
-                    if 'unit_name' in state.context:
-                        user_context['unit_name'] = state.context['unit_name']
-                
+                if hasattr(state, "context") and state.context:
+                    if "user_id" in state.context:
+                        user_context["user_id"] = state.context["user_id"]
+                    if "unit_id" in state.context:
+                        user_context["unit_id"] = state.context["unit_id"]
+                    if "unit_name" in state.context:
+                        user_context["unit_name"] = state.context["unit_name"]
+
                 # Create contextual operation name
                 base_operation = "simple_classifier.classify"
-                contextual_operation = self._create_contextual_operation_name(base_operation, user_context)
+                contextual_operation = self._create_contextual_operation_name(
+                    base_operation, user_context
+                )
 
                 with weave.attributes(
                     {
@@ -690,16 +733,18 @@ class GeneralHandler(Handler):
         self._logger = get_logger("general-handler")
         self._weave_available = self._logger.is_weave_available()
 
-    def _create_contextual_operation_name(self, base_name: str, user_context: dict = None) -> str:
+    def _create_contextual_operation_name(
+        self, base_name: str, user_context: dict = None
+    ) -> str:
         """Create a contextual operation name that includes user information."""
         if not user_context:
             return base_name
-        
+
         # Extract user identifiers
-        user_id = user_context.get('user_id', '')
-        unit_id = user_context.get('unit_id', '')
-        unit_name = user_context.get('unit_name', '')
-        
+        user_id = user_context.get("user_id", "")
+        unit_id = user_context.get("unit_id", "")
+        unit_name = user_context.get("unit_name", "")
+
         # Build contextual name
         context_parts = []
         if user_id:
@@ -708,12 +753,12 @@ class GeneralHandler(Handler):
             context_parts.append(f"unit:{unit_id}")
         if unit_name:
             # Clean unit name for use in operation names
-            clean_unit_name = unit_name.replace(' ', '_').replace('-', '_')[:20]
+            clean_unit_name = unit_name.replace(" ", "_").replace("-", "_")[:20]
             context_parts.append(f"apt:{clean_unit_name}")
-        
+
         if context_parts:
             return f"{base_name}[{','.join(context_parts)}]"
-        
+
         return base_name
 
     def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
@@ -727,20 +772,22 @@ class GeneralHandler(Handler):
                 import time
 
                 start_time = time.time()
-                
+
                 # Extract user context from state for contextual operation names
                 user_context = {}
-                if hasattr(state, 'context') and state.context:
-                    if 'user_id' in state.context:
-                        user_context['user_id'] = state.context['user_id']
-                    if 'unit_id' in state.context:
-                        user_context['unit_id'] = state.context['unit_id']
-                    if 'unit_name' in state.context:
-                        user_context['unit_name'] = state.context['unit_name']
-                
+                if hasattr(state, "context") and state.context:
+                    if "user_id" in state.context:
+                        user_context["user_id"] = state.context["user_id"]
+                    if "unit_id" in state.context:
+                        user_context["unit_id"] = state.context["unit_id"]
+                    if "unit_name" in state.context:
+                        user_context["unit_name"] = state.context["unit_name"]
+
                 # Create contextual operation name
                 base_operation = "general_handler.handle"
-                contextual_operation = self._create_contextual_operation_name(base_operation, user_context)
+                contextual_operation = self._create_contextual_operation_name(
+                    base_operation, user_context
+                )
 
                 with weave.attributes(
                     {
@@ -793,14 +840,14 @@ class GeneralHandler(Handler):
                 )
             # Extract user context from state and pass as kwargs
             user_context = {}
-            if hasattr(state, 'context') and state.context:
-                if 'user_id' in state.context:
-                    user_context['user_id'] = state.context['user_id']
-                if 'unit_id' in state.context:
-                    user_context['unit_id'] = state.context['unit_id']
-                if 'unit_name' in state.context:
-                    user_context['unit_name'] = state.context['unit_name']
-            
+            if hasattr(state, "context") and state.context:
+                if "user_id" in state.context:
+                    user_context["user_id"] = state.context["user_id"]
+                if "unit_id" in state.context:
+                    user_context["unit_id"] = state.context["unit_id"]
+                if "unit_name" in state.context:
+                    user_context["unit_name"] = state.context["unit_name"]
+
             resp = self._llm.invoke(
                 prompt, context=state.context, query_hint=state.text, **user_context
             )

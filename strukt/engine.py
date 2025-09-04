@@ -61,23 +61,25 @@ class Engine:
         """Check if we should automatically track user context from operations."""
         if not self._weave_available or not self._weave_config:
             return False
-        return getattr(self._weave_config, 'track_user_context', False)
+        return getattr(self._weave_config, "track_user_context", False)
 
     def _extract_user_context(self, state: InvocationState) -> dict:
         """Extract full context from InvocationState without cherry-picking keys."""
         ctx = getattr(state, "context", None)
         return dict(ctx) if isinstance(ctx, dict) else {}
 
-    def _create_contextual_operation_name(self, base_name: str, user_context: dict = None) -> str:
+    def _create_contextual_operation_name(
+        self, base_name: str, user_context: dict = None
+    ) -> str:
         """Create a contextual operation name that includes user information."""
         if not user_context:
             return base_name
-        
+
         # Extract user identifiers
-        user_id = user_context.get('user_id', '')
-        unit_id = user_context.get('unit_id', '')
-        unit_name = user_context.get('unit_name', '')
-        
+        user_id = user_context.get("user_id", "")
+        unit_id = user_context.get("unit_id", "")
+        unit_name = user_context.get("unit_name", "")
+
         # Build contextual name
         context_parts = []
         if user_id:
@@ -86,12 +88,12 @@ class Engine:
             context_parts.append(f"unit:{unit_id}")
         if unit_name:
             # Clean unit name for use in operation names
-            clean_unit_name = unit_name.replace(' ', '_').replace('-', '_')[:20]
+            clean_unit_name = unit_name.replace(" ", "_").replace("-", "_")[:20]
             context_parts.append(f"apt:{clean_unit_name}")
-        
+
         if context_parts:
             return f"{base_name}[{','.join(context_parts)}]"
-        
+
         return base_name
 
     def _log_operation(self, operation_name: str, user_context: dict = None, **kwargs):
@@ -108,9 +110,11 @@ class Engine:
 
             # Create a unique operation ID for tracking
             op_id = str(uuid.uuid4())
-            
+
             # Create contextual operation name
-            contextual_name = self._create_contextual_operation_name(operation_name, user_context)
+            contextual_name = self._create_contextual_operation_name(
+                operation_name, user_context
+            )
 
             # Build attributes payload once
             attributes = {
@@ -124,6 +128,7 @@ class Engine:
 
             # Friendly op name with StruktX namespace and contextual display name
             op_base_name = f"StruktX.Engine.{operation_name}"
+
             @weave.op(name=op_base_name, call_display_name=contextual_name)
             def _emit_operation(attrs: dict) -> dict:  # type: ignore[no-redef]
                 return attrs
@@ -195,83 +200,114 @@ class Engine:
         if self._weave_available:
             try:
                 import weave
-                
+
                 # Extract user context
-                user_context = self._extract_user_context(state) if self._should_auto_track_user_context() else {}
-                
+                user_context = (
+                    self._extract_user_context(state)
+                    if self._should_auto_track_user_context()
+                    else {}
+                )
+
                 # Create contextual operation name for engine run
                 base_op_name = "StruktX.Engine.run"
-                contextual_name = self._create_contextual_operation_name(base_op_name, user_context)
-                
+                contextual_name = self._create_contextual_operation_name(
+                    base_op_name, user_context
+                )
+
                 @weave.op(name=base_op_name, call_display_name=contextual_name)
                 def _execute_engine_run(engine_obj, state_obj):
                     start_time = time.time()
                     run_id = str(uuid.uuid4())
-                    results = engine_obj._run_with_context(state_obj, start_time, run_id, user_context)
-                    
+                    results = engine_obj._run_with_context(
+                        state_obj, start_time, run_id, user_context
+                    )
+
                     # Extract LLM responses and structured outputs for the main trace
                     llm_responses = []
                     structured_outputs = []
                     for result in results:
-                        if hasattr(result, 'response') and result.response:
+                        if hasattr(result, "response") and result.response:
                             llm_responses.append(result.response)
-                        
+
                         # Capture structured outputs (like DeviceControlResponse)
-                        if hasattr(result, 'commands') and result.commands:
-                            structured_outputs.append({
-                                "type": "device_commands",
-                                "response": result.response,
-                                "commands": result.commands
-                            })
-                        elif hasattr(result, 'data') and result.data:
-                            structured_outputs.append({
-                                "type": "structured_data", 
-                                "response": result.response,
-                                "data": result.data
-                            })
-                        elif hasattr(result, 'result') and result.result:
-                            structured_outputs.append({
-                                "type": "handler_result",
-                                "response": result.response,
-                                "result": result.result
-                            })
-                    
+                        if hasattr(result, "commands") and result.commands:
+                            structured_outputs.append(
+                                {
+                                    "type": "device_commands",
+                                    "response": result.response,
+                                    "commands": result.commands,
+                                }
+                            )
+                        elif hasattr(result, "data") and result.data:
+                            structured_outputs.append(
+                                {
+                                    "type": "structured_data",
+                                    "response": result.response,
+                                    "data": result.data,
+                                }
+                            )
+                        elif hasattr(result, "result") and result.result:
+                            structured_outputs.append(
+                                {
+                                    "type": "handler_result",
+                                    "response": result.response,
+                                    "result": result.result,
+                                }
+                            )
+
                     return results, llm_responses, structured_outputs
-                
-                with weave.attributes({
-                    "engine_component": "struktx_engine",
-                    "context": user_context,
-                    "input_text": state.text,
-                    "input_context": state.context,
-                }):
-                    results, llm_responses, structured_outputs = _execute_engine_run(self, state)
-                    
+
+                with weave.attributes(
+                    {
+                        "engine_component": "struktx_engine",
+                        "context": user_context,
+                        "input_text": state.text,
+                        "input_context": state.context,
+                    }
+                ):
+                    results, llm_responses, structured_outputs = _execute_engine_run(
+                        self, state
+                    )
+
                     # Add LLM outputs and structured data to the main trace attributes
                     if llm_responses or structured_outputs:
                         import weave
+
                         attributes = {
                             "llm_responses": llm_responses,
                             "llm_response_count": len(llm_responses),
                         }
                         if structured_outputs:
                             attributes["structured_outputs"] = structured_outputs
-                            attributes["structured_output_count"] = len(structured_outputs)
-                        
+                            attributes["structured_output_count"] = len(
+                                structured_outputs
+                            )
+
                         with weave.attributes(attributes):
                             pass  # This adds the attributes to the current trace
-                    
+
                     return results
             except Exception:
                 # Fallback to direct execution if Weave fails
                 pass
-        
+
         # Direct execution fallback
         start_time = time.time()
         run_id = str(uuid.uuid4())
-        user_context = self._extract_user_context(state) if self._should_auto_track_user_context() else None
+        user_context = (
+            self._extract_user_context(state)
+            if self._should_auto_track_user_context()
+            else None
+        )
         return self._run_with_context(state, start_time, run_id, user_context)
 
-    def _run_with_context(self, state: InvocationState, start_time: float, run_id: str, user_context: dict | None = None) -> List[HandlerResult]:
+    def _run_with_context(
+        self,
+        state: InvocationState,
+        start_time: float,
+        run_id: str,
+        user_context: dict | None = None,
+    ) -> List[HandlerResult]:
         """Internal method to run the engine with the given context."""
         self._log_operation(
             "engine_run_start",
@@ -307,34 +343,42 @@ class Engine:
 
             # Group and execute handlers
             grouped = self._group_parts_by_type(state)
-            results = self._execute_grouped_handlers(state, grouped, fallback, user_context)
+            results = self._execute_grouped_handlers(
+                state, grouped, fallback, user_context
+            )
 
             # Extract LLM responses and structured outputs from all results
             llm_responses = []
             structured_outputs = []
             for result in results:
-                if hasattr(result, 'response') and result.response:
+                if hasattr(result, "response") and result.response:
                     llm_responses.append(result.response)
-                
+
                 # Capture structured outputs (like DeviceControlResponse)
-                if hasattr(result, 'commands') and result.commands:
-                    structured_outputs.append({
-                        "type": "device_commands",
-                        "response": result.response,
-                        "commands": result.commands
-                    })
-                elif hasattr(result, 'data') and result.data:
-                    structured_outputs.append({
-                        "type": "structured_data", 
-                        "response": result.response,
-                        "data": result.data
-                    })
-                elif hasattr(result, 'result') and result.result:
-                    structured_outputs.append({
-                        "type": "handler_result",
-                        "response": result.response,
-                        "result": result.result
-                    })
+                if hasattr(result, "commands") and result.commands:
+                    structured_outputs.append(
+                        {
+                            "type": "device_commands",
+                            "response": result.response,
+                            "commands": result.commands,
+                        }
+                    )
+                elif hasattr(result, "data") and result.data:
+                    structured_outputs.append(
+                        {
+                            "type": "structured_data",
+                            "response": result.response,
+                            "data": result.data,
+                        }
+                    )
+                elif hasattr(result, "result") and result.result:
+                    structured_outputs.append(
+                        {
+                            "type": "handler_result",
+                            "response": result.response,
+                            "result": result.result,
+                        }
+                    )
 
             # Log completion with LLM outputs and structured data
             total_duration = time.time() - start_time
@@ -378,27 +422,33 @@ class Engine:
         if self._weave_available:
             try:
                 import weave
-                
+
                 # Extract user context for classifier operation
                 user_context = {}
-                if hasattr(state, 'context') and state.context:
+                if hasattr(state, "context") and state.context:
                     user_context = dict(state.context)
-                
+
                 # Create contextual operation name for classifier
                 classifier_name = type(self._classifier).__name__
                 base_op_name = f"StruktX.Classifier.{classifier_name}.classify"
-                contextual_name = self._create_contextual_operation_name(base_op_name, user_context)
-                
+                contextual_name = self._create_contextual_operation_name(
+                    base_op_name, user_context
+                )
+
                 @weave.op(name=base_op_name, call_display_name=contextual_name)
                 def _execute_classifier_op(classifier_obj, state_obj):
                     return classifier_obj.classify(state_obj)
-                
-                with weave.attributes({
-                    "classifier_type": classifier_name,
-                    "context": user_context,
-                    "input_text": state.text,
-                }):
-                    classification: QueryClassification = _execute_classifier_op(self._classifier, state)
+
+                with weave.attributes(
+                    {
+                        "classifier_type": classifier_name,
+                        "context": user_context,
+                        "input_text": state.text,
+                    }
+                ):
+                    classification: QueryClassification = _execute_classifier_op(
+                        self._classifier, state
+                    )
             except Exception:
                 # Fallback to direct execution if Weave fails
                 classification: QueryClassification = self._classifier.classify(state)
@@ -502,7 +552,9 @@ class Engine:
 
         # Execute normal tasks in parallel (regardless of background tasks)
         if normal_tasks:
-            parallel_results = self._execute_handlers_parallel(state, normal_tasks, user_context)
+            parallel_results = self._execute_handlers_parallel(
+                state, normal_tasks, user_context
+            )
             results.extend(parallel_results)
 
         # Log execution completion
@@ -520,7 +572,10 @@ class Engine:
         return results
 
     def _execute_handlers_parallel(
-        self, state: InvocationState, tasks: List[tuple[str, List[str], Handler]], user_context: dict | None = None
+        self,
+        state: InvocationState,
+        tasks: List[tuple[str, List[str], Handler]],
+        user_context: dict | None = None,
     ) -> List[HandlerResult]:
         """Execute multiple handlers in parallel."""
         start_time = time.time()
@@ -542,7 +597,12 @@ class Engine:
             future_to_task = {}
             for qtype, parts, handler in tasks:
                 future = executor.submit(
-                    self._execute_single_handler, state, qtype, parts, handler, user_context
+                    self._execute_single_handler,
+                    state,
+                    qtype,
+                    parts,
+                    handler,
+                    user_context,
                 )
                 future_to_task[future] = (qtype, parts, handler)
 
@@ -598,28 +658,32 @@ class Engine:
             if self._weave_available:
                 try:
                     import weave
-                    
+
                     # Extract user context for handler operation
                     user_context = {}
-                    if hasattr(state, 'context') and state.context:
+                    if hasattr(state, "context") and state.context:
                         user_context = dict(state.context)
-                    
+
                     # Create contextual operation name for handler
                     handler_name = type(handler).__name__
                     base_op_name = f"StruktX.Handler.{handler_name}.handle"
-                    contextual_name = self._create_contextual_operation_name(base_op_name, user_context)
-                    
+                    contextual_name = self._create_contextual_operation_name(
+                        base_op_name, user_context
+                    )
+
                     @weave.op(name=base_op_name, call_display_name=contextual_name)
                     def _execute_handler_op(handler_obj, state_obj, parts_obj):
                         return handler_obj.handle(state_obj, parts_obj)
-                    
-                    with weave.attributes({
-                        "handler_type": handler_name,
-                        "query_type": query_type,
-                        "context": user_context,
-                        "input_parts": parts,
-                        "input_text": state.text,
-                    }):
+
+                    with weave.attributes(
+                        {
+                            "handler_type": handler_name,
+                            "query_type": query_type,
+                            "context": user_context,
+                            "input_parts": parts,
+                            "input_text": state.text,
+                        }
+                    ):
                         result = _execute_handler_op(handler, state, parts)
                 except Exception:
                     # Fallback to direct execution if Weave fails
