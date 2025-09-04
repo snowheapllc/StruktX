@@ -81,6 +81,16 @@ class MCPConfig:
 
 
 @dataclass
+class WeaveConfig:
+    enabled: bool = False
+    project_name: str | None = None  # If None, will use PROJECT_NAME env var
+    environment: str | None = None  # If None, will use CURRENT_ENV env var
+    api_key_env: str = "WANDB_API_KEY"  # Environment variable for Weave API key
+    auto_track_operations: bool = True  # Automatically track operations
+    track_user_context: bool = True  # Track user context when available
+
+
+@dataclass
 class MiddlewareConfig:
     factory: Factory | None = None
     params: Dict[str, Any] = field(default_factory=dict)
@@ -94,6 +104,7 @@ class StruktConfig:
     handlers: HandlersConfig = field(default_factory=HandlersConfig)
     extras: ExtrasConfig = field(default_factory=ExtrasConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
+    weave: WeaveConfig = field(default_factory=WeaveConfig)
     middleware: List[MiddlewareConfig] = field(default_factory=list)
 
 
@@ -146,6 +157,14 @@ def _coerce_extras_config(value: Any) -> ExtrasConfig:
     return ExtrasConfig()
 
 
+def _coerce_weave_config(value: Any) -> WeaveConfig:
+    if isinstance(value, WeaveConfig):
+        return value
+    if isinstance(value, dict):
+        return WeaveConfig(**value)
+    return WeaveConfig()
+
+
 def ensure_config_types(config: StruktConfig) -> StruktConfig:
     """Normalize a `StruktConfig` instance so all nested fields are dataclasses.
 
@@ -193,6 +212,8 @@ def ensure_config_types(config: StruktConfig) -> StruktConfig:
         )
     else:
         config.mcp = MCPConfig()
+    # Coerce weave config
+    config.weave = _coerce_weave_config(getattr(config, "weave", None))
     # Normalize middleware list
     config.middleware = _coerce_middleware_list(getattr(config, "middleware", []))
     return config

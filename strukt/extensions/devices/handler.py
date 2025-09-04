@@ -201,9 +201,12 @@ class DeviceControlHandler(Handler):
                 commands=structured.commands, user_id=user_id, unit_id=unit_id
             )
             if result.get("status") == "success":
-                return HandlerResult(
+                handler_result = HandlerResult(
                     response=structured.response, status="DEVICE_CONTROL_SUCCESS"
                 )
+                # Attach structured data for Weave logging
+                handler_result.commands = structured.commands
+                return handler_result
             self._log.error(f"Execution failed: {result}")
             return HandlerResult(
                 response=f"Device control failed: {result.get('message', 'unknown error')}",

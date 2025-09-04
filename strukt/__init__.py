@@ -9,6 +9,7 @@ from .config import (
     MiddlewareConfig,
     StruktConfig,
     MCPConfig,
+    WeaveConfig,
 )
 from .defaults import MemoryAugmentedLLMClient, AwsSigV4Signer
 from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
@@ -50,4 +51,5 @@ __all__ = [
     "AwsSigV4Signer",
     "AWSSecretsManager",
     "build_fastapi_app",
+    "WeaveConfig",
 ]

@@ -10,6 +10,7 @@ from .defaults import (
     MemoryAugmentedLLMClient,
     SimpleClassifier,
     SimpleLLMClient,
+    UniversalLLMLogger,
 )
 from .engine import Engine
 from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
@@ -18,6 +19,7 @@ from .memory import KnowledgeStore
 from .middleware import Middleware
 from .types import InvocationState, StruktQueryEnum, StruktResponse, BackgroundTaskInfo
 from .utils import coerce_factory, load_factory
+from .logging import get_logger, StruktLogger
 
 
 class Strukt:
@@ -100,6 +102,53 @@ class Strukt:
         """Get all failed background tasks."""
         return self._engine.get_failed_background_tasks()
 
+    # --- Weave logging convenience helpers ---
+    def get_logger(self) -> StruktLogger:
+        """Get the StruktX logger instance."""
+        return get_logger("struktx")
+
+    def is_weave_available(self) -> bool:
+        """Check if Weave logging is available and initialized."""
+        logger = self.get_logger()
+        return logger.is_weave_available()
+
+    def get_weave_project_info(self) -> tuple[Optional[str], Optional[str]]:
+        """Get the current Weave project name and environment."""
+        logger = self.get_logger()
+        return logger.get_weave_project_info()
+
+    def create_weave_op(self, func=None, name=None, call_display_name=None):
+        """Create a Weave operation decorator for tracking function calls."""
+        logger = self.get_logger()
+        return logger.create_weave_op(func, name, call_display_name)
+
+    def weave_context(
+        self, 
+        user_id: Optional[str] = None, 
+        unit_id: Optional[str] = None, 
+        unit_name: Optional[str] = None,
+        context: Optional[dict] = None
+    ):
+        """Context manager for Weave logging with user context.
+        
+        Args:
+            user_id: Explicit user ID (takes precedence over context)
+            unit_id: Explicit unit ID (takes precedence over context)
+            unit_name: Explicit unit name (takes precedence over context)
+            context: Dictionary to extract user context from (fallback if explicit values not provided)
+        """
+        logger = self.get_logger()
+        return logger.weave_context(user_id, unit_id, unit_name, context)
+
+    def weave_context_from_state(self, state):
+        """Context manager that automatically extracts user context from InvocationState.
+        
+        Args:
+            state: InvocationState object containing context information
+        """
+        logger = self.get_logger()
+        return logger.weave_context_from_state(state)
+
 
 def _build_llm(cfg: StruktConfig) -> LLMClient:
     factory = coerce_factory(cfg.llm.factory)
@@ -112,17 +161,19 @@ def _build_llm(cfg: StruktConfig) -> LLMClient:
 
                 candidate = ChatOpenAI(api_key=api_key)
                 adapted = adapt_to_llm_client(candidate)
-                return adapted
+                return UniversalLLMLogger(adapted)
             except Exception:
                 pass
-        return SimpleLLMClient()  # minimal default
+        return UniversalLLMLogger(SimpleLLMClient())  # minimal default with logging
     candidate = factory(**cfg.llm.params)  # type: ignore[call-arg]
     # Auto-adapt common LangChain runnables to our LLMClient protocol
     try:
         adapted = adapt_to_llm_client(candidate)
-        return adapted
+        # Wrap with universal LLM logger for comprehensive logging
+        return UniversalLLMLogger(adapted)
     except Exception:
-        return candidate  # type: ignore[return-value]
+        # Wrap even the fallback candidate
+        return UniversalLLMLogger(candidate)  # type: ignore[arg-type]
 
 
 def _build_classifier(cfg: StruktConfig, llm: LLMClient) -> Classifier:
@@ -228,6 +279,14 @@ def _build_middleware(
 def create(config: StruktConfig) -> Strukt:
     # Normalize config to ensure dicts are coerced into dataclasses
     config = ensure_config_types(config)
+
+    # Initialize Weave logging if enabled
+    if config.weave.enabled:
+        logger = get_logger("struktx")
+        logger.init_weave(
+            project_name=config.weave.project_name, environment=config.weave.environment
+        )
+
     llm = _build_llm(config)
     memory = _build_memory(config, llm)
     # Optionally build a KnowledgeStore bound to the engine
@@ -242,6 +301,7 @@ def create(config: StruktConfig) -> Strukt:
     # Wrap LLM with memory augmentation when enabled
     if memory is not None and getattr(config.memory, "augment_llm", True):
         llm = MemoryAugmentedLLMClient(llm, memory)
+
     classifier = _build_classifier(config, llm)
     handlers = _build_handlers(config, llm, memory)
     middleware = _build_middleware(config, llm=llm, memory=memory)
@@ -251,5 +311,6 @@ def create(config: StruktConfig) -> Strukt:
         default_route=config.handlers.default_route,
         memory=memory,
         middleware=middleware,
+        weave_config=config.weave,
     )
     return Strukt(engine)

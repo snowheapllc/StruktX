@@ -545,6 +545,196 @@ log.info("Hello logs")
 
 Augmented memory injections appear under the `memory` logger with the provided `augment_source` label.
 
+### Weave Logging Integration
+
+StruktX includes comprehensive Weave logging integration for detailed operation tracking, performance monitoring, and debugging. Weave automatically tracks all LLM calls, handler executions, memory operations, and system activities.
+
+#### Configuration
+
+Enable Weave logging in your StruktX configuration:
+
+```python
+from strukt import StruktConfig, WeaveConfig
+
+config = StruktConfig(
+    # ... other config
+    weave=WeaveConfig(
+        enabled=True,
+        project_name="my-ai-app",  # Or use PROJECT_NAME env var
+        environment="development",  # Or use CURRENT_ENV env var
+        api_key_env="WANDB_API_KEY",  # Environment variable for Weave API key
+        auto_track_operations=True,  # Automatically track operations
+        track_user_context=True      # Track user context when available
+    )
+)
+```
+
+#### Environment Variables
+
+Set these environment variables for Weave integration:
+
+```bash
+export WANDB_API_KEY="your-weave-api-key"
+export PROJECT_NAME="my-project"        # Optional, defaults to "struktx"
+export CURRENT_ENV="production"         # Optional, defaults to "development"
+```
+
+#### Automatic Operation Tracking
+
+When enabled, Weave automatically tracks:
+
+- **Engine Operations**: `engine_run_start/complete`, `query_classification`, `grouped_handlers_start/complete`
+- **LLM Operations**: `simple_llm_client.invoke/structured`, `memory_augmented_llm_client.invoke`
+- **Handler Operations**: `handler_execution`, `general_handler.handle`
+- **Memory Operations**: `memory_retrieval`, `memory_injection`
+- **Background Tasks**: `background_task_created`, `parallel_execution_start/complete`
+- **Performance Metrics**: Execution times, throughput, success/failure rates
+- **Error Tracking**: Error types, messages, context, stack traces
+- **User Context**: When `track_user_context=True`, automatically extracts `user_id`, `unit_id`, and `unit_name` from operation context
+
+#### Automatic User Context Tracking
+
+When `track_user_context=True` in your WeaveConfig, StruktX automatically extracts `user_id`, `unit_id`, and `unit_name` from the context of every operation:
+
+```python
+# With track_user_context=True, this automatically tracks user context
+response = ai.invoke(
+    "What's the weather like today?", 
+    context={
+        "user_id": "user123",
+        "unit_id": "apartment456", 
+        "unit_name": "Sunset Apartments"
+    }
+)
+# All operations within this call are automatically tagged with user context in Weave
+```
+
+**Enhanced Operation Names**: Operation names now include user context for better traceability:
+- `engine_run_start[user:user123,unit:apartment456,apt:Sunset_Apartments]`
+- `query_classification[user:user123,unit:apartment456,apt:Sunset_Apartments]`
+- `simple_llm_client.invoke[user:user123,unit:apartment456,apt:Sunset_Apartments]`
+- `general_handler.handle[user:user123,unit:apartment456,apt:Sunset_Apartments]`
+
+#### Manual User Context Tracking
+
+For more control, you can still use the `weave_context` method. You can provide context in multiple ways:
+
+**Explicit values:**
+```python
+# Track all operations within a user context
+with ai.weave_context(
+    user_id="user123",
+    unit_id="apartment456",
+    unit_name="Sunset Apartments"
+):
+    # All operations within this context will have user context
+    response = ai.invoke("What's the weather like today?")
+    response2 = ai.invoke("Can you help me schedule maintenance?")
+```
+
+**From context dictionary:**
+```python
+# Extract user context from a dictionary
+user_context = {
+    "user_id": "user456",
+    "unit_id": "apartment789",
+    "unit_name": "Downtown Loft"
+}
+
+with ai.weave_context(context=user_context):
+    response = ai.invoke("Can you help me schedule maintenance?")
+```
+
+**Mixed explicit and context values:**
+```python
+# Explicit values take precedence over context dictionary
+with ai.weave_context(
+    user_id="explicit_override",  # This overrides context["user_id"]
+    context=user_context
+):
+    response = ai.invoke("Turn on the living room lights")
+```
+
+**From InvocationState (for handlers):**
+```python
+# Automatically extract context from InvocationState
+with ai.weave_context_from_state(state):
+    # All operations will have user context from state.context
+    response = ai.invoke("What's my current temperature setting?")
+```
+
+#### Custom Operation Tracking
+
+Decorate functions with Weave tracking:
+
+```python
+@ai.create_weave_op(name="process_user_request", call_display_name="Process Request")
+def process_user_request(user_input: str, user_context: dict) -> str:
+    """This function will be automatically tracked by Weave."""
+    # Function logic here
+    return f"Processed: {user_input}"
+
+# Call the decorated function
+result = process_user_request("Hello", {"user_id": "user123"})
+```
+
+#### Weave Dashboard Information
+
+In your Weave dashboard, you'll see comprehensive tracking:
+
+1. **Engine Operations**: Complete request lifecycle from start to completion
+2. **LLM Operations**: Input prompts, outputs, timing, and performance metrics
+3. **Handler Operations**: Input/output tracking, execution times, success rates
+4. **Memory Operations**: Retrieval patterns, injection sources, context usage
+5. **User Context**: All operations tagged with user_id, unit_id, unit_name
+6. **Performance Metrics**: Execution times, throughput, latency, success/failure rates
+7. **Error Tracking**: Error types, messages, context at time of error, stack traces
+
+#### Advanced Usage
+
+Access Weave functionality directly through the Strukt instance:
+
+```python
+# Check if Weave is available
+if ai.is_weave_available():
+    print("Weave logging is enabled")
+    
+    # Get project information
+    project_name, environment = ai.get_weave_project_info()
+    print(f"Project: {project_name}-{environment}")
+
+# Create custom Weave operations
+@ai.create_weave_op(name="custom_operation")
+def my_custom_function():
+    pass
+
+# Use context managers for user tracking
+with ai.weave_context(user_id="user1", unit_id="unit1"):
+    # Operations tracked with user context
+    pass
+```
+
+#### Installation
+
+Install Weave as an optional dependency:
+
+```bash
+# Install with Weave support
+pip install struktx[weave]
+
+# Or install Weave separately
+pip install weave
+```
+
+#### Best Practices
+
+1. **Project Naming**: Use descriptive project names that reflect your application
+2. **Environment Separation**: Use different environments for development, staging, and production
+3. **User Context**: Always provide user context for better tracking and debugging
+4. **Custom Operations**: Decorate important business logic functions for detailed tracking
+5. **Error Handling**: Weave automatically tracks errors, but ensure proper exception handling
+6. **Performance Monitoring**: Use the tracked metrics to identify bottlenecks and optimize performance
+
 ### Memory Extraction Middleware
 
 Automatically extracts durable facts from conversations and stores them in your memory engine (e.g., Upstash Vector). On subsequent requests, `MemoryAugmentedLLMClient` retrieves relevant items and prepends them to prompts.

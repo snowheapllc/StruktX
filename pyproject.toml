@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "struktx-ai"
-version = "0.0.3-beta2"
+version = "0.0.3-beta3"
 description = "A configurable, typed AI framework with swappable LLM, classifier, handlers, and optional memory"
 readme = "README.md"
 license = {text = "MIT"}
@@ -80,8 +80,13 @@ all = [
     "langchain-community>=0.2.0",
     "upstash-vector>=0.1.0",
     "chromadb>=0.5.0",
+    "weave>=0.1.0",
 ]
 
+# Weave logging support
+weave = [
+    "weave>=0.1.0",
+]
 
 
 [project.urls]

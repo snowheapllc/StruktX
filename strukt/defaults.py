@@ -23,6 +23,219 @@ class DateTimeEncoder(_json.JSONEncoder):
         return super().default(obj)
 
 
+
+
+class UniversalLLMLogger(LLMClient):
+    """
+    Universal wrapper that automatically logs all LLM operations to Weave.
+    
+    This wrapper intercepts ALL LLM calls (invoke, structured, ainvoke, etc.)
+    and captures both the inputs and outputs for comprehensive logging.
+    Works with any underlying LLM client implementation.
+    """
+    
+    def __init__(self, base: LLMClient) -> None:
+        self._base = base
+        self._logger = get_logger("universal-llm-logger")
+        self._weave_available = self._logger.is_weave_available()
+    
+    def _create_contextual_operation_name(self, base_name: str, context: dict | None) -> str:
+        """Create contextual operation name with user info."""
+        if not context:
+            return base_name
+        
+        user_id = str(context.get("user_id", "")) if isinstance(context.get("user_id"), (str, int)) else ""
+        unit_id = str(context.get("unit_id", "")) if isinstance(context.get("unit_id"), (str, int)) else ""
+        unit_name = context.get("unit_name")
+        
+        parts: list[str] = []
+        if user_id:
+            parts.append(f"user:{user_id}")
+        if unit_id:
+            parts.append(f"unit:{unit_id}")
+        if unit_name:
+            clean = str(unit_name).replace(" ", "_").replace("-", "_")[:20]
+            parts.append(f"apt:{clean}")
+        
+        return f"{base_name}[{','.join(parts)}]" if parts else base_name
+    
+    def _safe_context(self, d: dict | None) -> dict:
+        """Create safe context dict for logging."""
+        if not isinstance(d, dict):
+            return {}
+        safe = dict(d)
+        # Remove potentially large fields that might clutter logs
+        for k in ["input_prompt", "prompt", "messages", "docs", "documents", "timestamp"]:
+            safe.pop(k, None)
+        return safe
+    
+    def _safe_serialize_output(self, output: Any) -> Any:
+        """Safely serialize output for JSON compatibility."""
+        try:
+            # If it's a Pydantic model, use model_dump
+            if hasattr(output, 'model_dump'):
+                return output.model_dump()
+            elif hasattr(output, 'dict'):
+                return output.dict()
+            # If it's a simple type, return as-is
+            elif isinstance(output, (str, int, float, bool, list, dict, type(None))):
+                return output
+            # For other objects, try to convert to dict
+            elif hasattr(output, '__dict__'):
+                return {k: v for k, v in output.__dict__.items() if not k.startswith('_')}
+            # Last resort: convert to string
+            else:
+                return str(output)
+        except Exception:
+            # If all else fails, return a safe representation
+            return {
+                "type": type(output).__name__,
+                "repr": str(output)[:200] + "..." if len(str(output)) > 200 else str(output)
+            }
+    
+    def _log_llm_call(self, operation: str, inputs: dict, output: Any, context: dict | None = None) -> None:
+        """Log LLM call to Weave with full context."""
+        if not self._weave_available:
+            return
+        
+        try:
+            import weave
+            import time
+            
+            # Create contextual operation name
+            base_op_name = f"StruktX.LLM.Universal.{operation}"
+            contextual_name = self._create_contextual_operation_name(base_op_name, context)
+            
+            # Safely serialize output for JSON compatibility
+            safe_output = self._safe_serialize_output(output)
+            
+            # Prepare attributes
+            attributes = {
+                "wrapper": "UniversalLLMLogger",
+                "wrapped_type": type(self._base).__name__,
+                "operation": operation,
+                "context": self._safe_context(context),
+                "timestamp": time.time(),
+                "inputs": inputs,
+                "output": safe_output,
+            }
+            
+            # Create Weave operation
+            @weave.op(name=base_op_name, call_display_name=contextual_name)
+            def _log_llm_operation(attrs: dict) -> dict:
+                return attrs
+            
+            with weave.attributes(attributes):
+                _log_llm_operation(attributes)
+                
+        except Exception as e:
+            self._logger.warn(f"Failed to log LLM operation {operation}: {e}")
+    
+    def invoke(self, prompt: str, **kwargs: Any) -> Any:
+        """Intercept and log invoke calls."""
+        # Extract context from kwargs
+        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        
+        # Prepare inputs for logging
+        inputs = {
+            "prompt": prompt,
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+        }
+        
+        # Execute the actual LLM call
+        result = self._base.invoke(prompt, **kwargs)
+        
+        # Log the call
+        self._log_llm_call("invoke", inputs, result, context)
+        
+        return result
+    
+    def structured(self, prompt: str, output_model: Type[BaseModel], **kwargs: Any) -> Any:
+        """Intercept and log structured calls."""
+        # Extract context from kwargs
+        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        
+        # Prepare inputs for logging - safely serialize output_model
+        model_name = "unknown"
+        try:
+            if hasattr(output_model, "__name__"):
+                model_name = output_model.__name__
+            elif hasattr(output_model, "__class__") and hasattr(output_model.__class__, "__name__"):
+                model_name = output_model.__class__.__name__
+            else:
+                model_name = str(type(output_model).__name__)
+        except Exception:
+            model_name = "unknown_model"
+        
+        inputs = {
+            "prompt": prompt,
+            "output_model": model_name,
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+        }
+        
+        # Execute the actual LLM call
+        result = self._base.structured(prompt, output_model, **kwargs)
+        
+        # Log the call
+        self._log_llm_call("structured", inputs, result, context)
+        
+        return result
+    
+    async def ainvoke(self, prompt: str, **kwargs: Any) -> Any:
+        """Intercept and log async invoke calls."""
+        # Extract context from kwargs
+        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        
+        # Prepare inputs for logging
+        inputs = {
+            "prompt": prompt,
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+        }
+        
+        # Execute the actual LLM call
+        result = await self._base.ainvoke(prompt, **kwargs)
+        
+        # Log the call
+        self._log_llm_call("ainvoke", inputs, result, context)
+        
+        return result
+    
+    async def astructured(self, prompt: str, output_model: Type[BaseModel], **kwargs: Any) -> Any:
+        """Intercept and log async structured calls."""
+        # Extract context from kwargs
+        context = kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
+        
+        # Prepare inputs for logging - safely serialize output_model
+        model_name = "unknown"
+        try:
+            if hasattr(output_model, "__name__"):
+                model_name = output_model.__name__
+            elif hasattr(output_model, "__class__") and hasattr(output_model.__class__, "__name__"):
+                model_name = output_model.__class__.__name__
+            else:
+                model_name = str(type(output_model).__name__)
+        except Exception:
+            model_name = "unknown_model"
+        
+        inputs = {
+            "prompt": prompt,
+            "output_model": model_name,
+            "kwargs": {k: v for k, v in kwargs.items() if k != "context"}
+        }
+        
+        # Execute the actual LLM call
+        result = await self._base.astructured(prompt, output_model, **kwargs)
+        
+        # Log the call
+        self._log_llm_call("astructured", inputs, result, context)
+        
+        return result
+    
+    # Delegate all other attributes to the base client
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._base, name)
+
+
 @runtime_checkable
 class RequestSigner(Protocol):
     def sign(
@@ -217,35 +430,31 @@ class SimpleLLMClient(LLMClient):
     For development, this client just echoes prompts.
     """
 
+    def __init__(self):
+        self._logger = get_logger("simple-llm-client")
+
     def invoke(self, prompt: str, **kwargs: Any) -> Any:
-        # No formatting here, this client is for dev only and echoes back
+        """Simple echo implementation for development."""
         return type("Resp", (), {"content": prompt})
 
     def structured(
         self, prompt: str, output_model: Type[BaseModel], **kwargs: Any
     ) -> Any:
-        # Try to return an empty-but-valid object for common fields to avoid raising
+        """Simple structured response for development."""
         try:
-            return output_model.model_validate(
-                {
-                    "query_types": [],
-                    "confidences": [],
-                    "parts": [],
-                }
-            )
+            # Try to return an empty-but-valid object for common fields
+            return output_model.model_validate({
+                "query_types": [],
+                "confidences": [],
+                "parts": [],
+            })
         except Exception:
-            # Best-effort pydantic v2 -> v1 fallback paths
+            # Fallback for other models
             try:
-                return output_model.model_construct(
-                    query_types=[], confidences=[], parts=[]
-                )  # type: ignore[attr-defined]
+                return output_model.model_construct()
             except Exception:
-                try:
-                    return output_model.construct(
-                        query_types=[], confidences=[], parts=[]
-                    )  # type: ignore[attr-defined]
-                except Exception:
-                    return output_model()  # may still raise if strict
+                # Last resort: return a mock object
+                return type("MockResponse", (), {})()
 
 
 class MemoryAugmentedLLMClient(LLMClient):
@@ -257,6 +466,7 @@ class MemoryAugmentedLLMClient(LLMClient):
         self._base = base
         self._memory = memory
         self._top_k = top_k
+        self._logger = get_logger("memory-augmented-llm-client")
 
     def _augment(
         self,
@@ -332,12 +542,18 @@ class MemoryAugmentedLLMClient(LLMClient):
         return f"Relevant memory:\n{mem_block}\n\n{prompt}"
 
     def invoke(self, prompt: str, **kwargs: Any) -> Any:
+        """Augment prompt with memory and delegate to base client."""
+        # Execute memory augmentation
         ctx = kwargs.get("context") if isinstance(kwargs, dict) else None
         qh = kwargs.get("query_hint") if isinstance(kwargs, dict) else None
         src = None
         if isinstance(kwargs, dict):
             src = kwargs.get("augment_source") or kwargs.get("caller")
-        augmented = self._augment(prompt, context=ctx, query_hint=qh, source=src)
+
+        augmented = self._augment(
+            prompt, context=ctx, query_hint=qh, source=src
+        )
+
         # Remove augmentation-only kwargs before delegating
         clean_kwargs = dict(kwargs)
         if "context" in clean_kwargs:
@@ -348,6 +564,8 @@ class MemoryAugmentedLLMClient(LLMClient):
             clean_kwargs.pop("augment_source", None)
         if "caller" in clean_kwargs:
             clean_kwargs.pop("caller", None)
+
+        # Execute base LLM client
         return self._base.invoke(augmented, **clean_kwargs)
 
     def structured(self, prompt: str, output_model: Any, **kwargs: Any) -> Any:
@@ -370,8 +588,90 @@ class MemoryAugmentedLLMClient(LLMClient):
 
 
 class SimpleClassifier(Classifier):
+    def __init__(self):
+        self._logger = get_logger("simple-classifier")
+        self._weave_available = self._logger.is_weave_available()
+
+    def _create_contextual_operation_name(self, base_name: str, user_context: dict = None) -> str:
+        """Create a contextual operation name that includes user information."""
+        if not user_context:
+            return base_name
+        
+        # Extract user identifiers
+        user_id = user_context.get('user_id', '')
+        unit_id = user_context.get('unit_id', '')
+        unit_name = user_context.get('unit_name', '')
+        
+        # Build contextual name
+        context_parts = []
+        if user_id:
+            context_parts.append(f"user:{user_id}")
+        if unit_id:
+            context_parts.append(f"unit:{unit_id}")
+        if unit_name:
+            # Clean unit name for use in operation names
+            clean_unit_name = unit_name.replace(' ', '_').replace('-', '_')[:20]
+            context_parts.append(f"apt:{clean_unit_name}")
+        
+        if context_parts:
+            return f"{base_name}[{','.join(context_parts)}]"
+        
+        return base_name
+
     def classify(self, state: InvocationState) -> QueryClassification:
-        # Default: route everything to 'general'
+        # Log classification with Weave if available
+        if self._weave_available:
+            try:
+                import weave
+                import time
+
+                start_time = time.time()
+                
+                # Extract user context from state for contextual operation names
+                user_context = {}
+                if hasattr(state, 'context') and state.context:
+                    if 'user_id' in state.context:
+                        user_context['user_id'] = state.context['user_id']
+                    if 'unit_id' in state.context:
+                        user_context['unit_id'] = state.context['unit_id']
+                    if 'unit_name' in state.context:
+                        user_context['unit_name'] = state.context['unit_name']
+                
+                # Create contextual operation name
+                base_operation = "simple_classifier.classify"
+                contextual_operation = self._create_contextual_operation_name(base_operation, user_context)
+
+                with weave.attributes(
+                    {
+                        "classifier_type": "simple_classifier",
+                        "operation": "classify",
+                        "contextual_operation_name": contextual_operation,
+                        "input_text": state.text,
+                        "input_context": state.context,
+                        "timestamp": start_time,
+                    }
+                ):
+                    # Execute classification
+                    result = QueryClassification(
+                        query_types=[StruktQueryEnum.GENERAL],
+                        confidences=[1.0],
+                        parts=[state.text],
+                    )
+
+                    # Log completion
+                    duration = time.time() - start_time
+                    self._logger.debug(
+                        f"SimpleClassifier classify completed in {duration:.3f}s"
+                    )
+
+                    return result
+
+            except Exception as e:
+                self._logger.warn(f"Failed to log Weave operation: {e}")
+                # Fallback to original implementation
+                pass
+
+        # Fallback implementation without Weave logging
         return QueryClassification(
             query_types=[StruktQueryEnum.GENERAL], confidences=[1.0], parts=[state.text]
         )
@@ -387,10 +687,96 @@ class GeneralHandler(Handler):
     def __init__(self, llm: LLMClient, prompt_template: str | None = None) -> None:
         self._llm = llm
         self._prompt = prompt_template
+        self._logger = get_logger("general-handler")
+        self._weave_available = self._logger.is_weave_available()
+
+    def _create_contextual_operation_name(self, base_name: str, user_context: dict = None) -> str:
+        """Create a contextual operation name that includes user information."""
+        if not user_context:
+            return base_name
+        
+        # Extract user identifiers
+        user_id = user_context.get('user_id', '')
+        unit_id = user_context.get('unit_id', '')
+        unit_name = user_context.get('unit_name', '')
+        
+        # Build contextual name
+        context_parts = []
+        if user_id:
+            context_parts.append(f"user:{user_id}")
+        if unit_id:
+            context_parts.append(f"unit:{unit_id}")
+        if unit_name:
+            # Clean unit name for use in operation names
+            clean_unit_name = unit_name.replace(' ', '_').replace('-', '_')[:20]
+            context_parts.append(f"apt:{clean_unit_name}")
+        
+        if context_parts:
+            return f"{base_name}[{','.join(context_parts)}]"
+        
+        return base_name
 
     def handle(self, state: InvocationState, parts: List[str]) -> HandlerResult:
         # Preserve the user's full question for general responses
         text = state.text
+
+        # Log handler execution with Weave if available
+        if self._weave_available:
+            try:
+                import weave
+                import time
+
+                start_time = time.time()
+                
+                # Extract user context from state for contextual operation names
+                user_context = {}
+                if hasattr(state, 'context') and state.context:
+                    if 'user_id' in state.context:
+                        user_context['user_id'] = state.context['user_id']
+                    if 'unit_id' in state.context:
+                        user_context['unit_id'] = state.context['unit_id']
+                    if 'unit_name' in state.context:
+                        user_context['unit_name'] = state.context['unit_name']
+                
+                # Create contextual operation name
+                base_operation = "general_handler.handle"
+                contextual_operation = self._create_contextual_operation_name(base_operation, user_context)
+
+                with weave.attributes(
+                    {
+                        "handler_type": "general_handler",
+                        "operation": "handle",
+                        "contextual_operation_name": contextual_operation,
+                        "input_text": text,
+                        "input_parts": parts,
+                        "input_context": state.context,
+                        "has_custom_prompt": self._prompt is not None,
+                        "timestamp": start_time,
+                    }
+                ):
+                    # Execute handler logic
+                    result = self._execute_handle_logic(state, parts, text)
+
+                    # Log completion
+                    duration = time.time() - start_time
+                    self._logger.debug(
+                        f"GeneralHandler handle completed in {duration:.3f}s"
+                    )
+
+                    return result
+
+            except Exception as e:
+                self._logger.warn(f"Failed to log Weave operation: {e}")
+                # Fallback to original implementation
+                pass
+
+        # Fallback implementation without Weave logging
+        return self._execute_handle_logic(state, parts, text)
+
+    def _execute_handle_logic(
+        self, state: InvocationState, parts: List[str], text: str
+    ) -> HandlerResult:
+        """Execute the actual handler logic."""
         try:
             if self._prompt:
                 # Safely format only known variables, preserving any JSON braces in templates
@@ -405,8 +791,18 @@ class GeneralHandler(Handler):
                     f"User: {text}\n"
                     "Assistant:"
                 )
+            # Extract user context from state and pass as kwargs
+            user_context = {}
+            if hasattr(state, 'context') and state.context:
+                if 'user_id' in state.context:
+                    user_context['user_id'] = state.context['user_id']
+                if 'unit_id' in state.context:
+                    user_context['unit_id'] = state.context['unit_id']
+                if 'unit_name' in state.context:
+                    user_context['unit_name'] = state.context['unit_name']
+            
             resp = self._llm.invoke(
-                prompt, context=state.context, query_hint=state.text
+                prompt, context=state.context, query_hint=state.text, **user_context
             )
             content = getattr(resp, "content", None)
             response = str(content) if content is not None else str(resp)

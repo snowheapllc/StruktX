@@ -804,6 +804,205 @@ log.info("Hello logs")
         <p>Augmented memory injections appear under the <code>memory</code> logger with the provided <code>augment_source</code> label.</p>
       </section>
 
+      <section id="weave-logging" className="section">
+        <h3 className="text-xl font-semibold">Weave Logging Integration</h3>
+        <p>StruktX includes comprehensive Weave logging integration for detailed operation tracking, performance monitoring, and debugging. Weave automatically tracks all LLM calls, handler executions, memory operations, and system activities.</p>
+        
+        <h4 className="text-lg font-semibold mt-6">Configuration</h4>
+        <p>Enable Weave logging in your StruktX configuration:</p>
+        <CodeBlock className="code-block" language="python" filename="weave_config.py" showExample={true} code={`from strukt import StruktConfig, WeaveConfig
+
+config = StruktConfig(
+    # ... other config
+    weave=WeaveConfig(
+        enabled=True,
+        project_name="my-ai-app",  # Or use PROJECT_NAME env var
+        environment="development",  # Or use CURRENT_ENV env var
+        api_key_env="WANDB_API_KEY",  # Environment variable for Weave API key
+        auto_track_operations=True,  # Automatically track operations
+        track_user_context=True      # Track user context when available
+    )
+)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Environment Variables</h4>
+        <p>Set these environment variables for Weave integration:</p>
+        <CodeBlock className="code-block" language="bash" filename="weave_env.sh" showExample={true} code={`export WANDB_API_KEY="your-weave-api-key"
+export PROJECT_NAME="my-project"        # Optional, defaults to "struktx"
+export CURRENT_ENV="production"         # Optional, defaults to "development"
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Automatic Operation Tracking</h4>
+        <p>When enabled, Weave automatically tracks:</p>
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">Engine Operations</span>
+            <span><code>engine_run_start/complete</code>, <code>query_classification</code>, <code>grouped_handlers_start/complete</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">LLM Operations</span>
+            <span><code>simple_llm_client.invoke/structured</code>, <code>memory_augmented_llm_client.invoke</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Handler Operations</span>
+            <span><code>handler_execution</code>, <code>general_handler.handle</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Memory Operations</span>
+            <span><code>memory_retrieval</code>, <code>memory_injection</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Background Tasks</span>
+            <span><code>background_task_created</code>, <code>parallel_execution_start/complete</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Performance Metrics</span>
+            <span>Execution times, throughput, success/failure rates</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Error Tracking</span>
+            <span>Error types, messages, context, stack traces</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">User Context</span>
+            <span>When <code>track_user_context=True</code>, automatically extracts <code>user_id</code>, <code>unit_id</code>, and <code>unit_name</code> from operation context</span>
+          </div>
+        </div>
+
+        <h4 className="text-lg font-semibold mt-6">Automatic User Context Tracking</h4>
+        <p>When <code>track_user_context=True</code> in your WeaveConfig, StruktX automatically extracts <code>user_id</code>, <code>unit_id</code>, and <code>unit_name</code> from the context of every operation:</p>
+        <CodeBlock className="code-block" language="python" filename="auto_context.py" showExample={true} code={`# With track_user_context=True, this automatically tracks user context
+response = ai.invoke(
+    "What's the weather like today?", 
+    context={
+        "user_id": "user123",
+        "unit_id": "apartment456", 
+        "unit_name": "Sunset Apartments"
+    }
+)
+# All operations within this call are automatically tagged with user context in Weave
+`} />
+        
+        <h5 className="concept-badge mt-4">Enhanced Operation Names</h5>
+        <p>Operation names now include user context for better traceability:</p>
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">Engine Operations</span>
+            <span><code>engine_run_start[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Classification</span>
+            <span><code>query_classification[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">LLM Operations</span>
+            <span><code>simple_llm_client.invoke[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Handler Operations</span>
+            <span><code>general_handler.handle[user:user123,unit:apartment456,apt:Sunset_Apartments]</code></span>
+          </div>
+        </div>
+
+        <h4 className="text-lg font-semibold mt-6">User Context Tracking</h4>
+        <p>Track operations with user context using the <code>weave_context</code> method. You can provide context in multiple ways:</p>
+        
+        <h5 className="concept-badge-inline text-md font-semibold">Explicit values:</h5>
+        <CodeBlock className="code-block" language="python" filename="weave_context_explicit.py" showExample={true} code={`# Track all operations within a user context
+with ai.weave_context(
+    user_id="user123",
+    unit_id="apartment456",
+    unit_name="Sunset Apartments"
+):
+    # All operations within this context will have user context
+    response = ai.invoke("What's the weather like today?")
+    response2 = ai.invoke("Can you help me schedule maintenance?")
+`} />
+
+        <h5 className="concept-badge-inline text-md font-semibold">From context dictionary:</h5>
+        <CodeBlock className="code-block" language="python" filename="weave_context_dict.py" showExample={true} code={`# Extract user context from a dictionary
+user_context = {
+    "user_id": "user456",
+    "unit_id": "apartment789",
+    "unit_name": "Downtown Loft"
+}
+
+with ai.weave_context(context=user_context):
+    response = ai.invoke("Can you help me schedule maintenance?")
+`} />
+
+        <h5 className="concept-badge-inline text-md font-semibold">From InvocationState (for handlers):</h5>
+        <CodeBlock className="code-block" language="python" filename="weave_context_state.py" showExample={true} code={`# Automatically extract context from InvocationState
+with ai.weave_context_from_state(state):
+    # All operations will have user context from state.context
+    response = ai.invoke("What's my current temperature setting?")
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Custom Operation Tracking</h4>
+        <p>Decorate functions with Weave tracking:</p>
+        <CodeBlock className="code-block" language="python" filename="weave_decorator.py" showExample={true} code={`@ai.create_weave_op(name="process_user_request", call_display_name="Process Request")
+def process_user_request(user_input: str, user_context: dict) -> str:
+    """This function will be automatically tracked by Weave."""
+    # Function logic here
+    return f"Processed: {user_input}"
+
+# Call the decorated function
+result = process_user_request("Hello", {"user_id": "user123"})
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Weave Dashboard Information</h4>
+        <p>In your Weave dashboard, you'll see comprehensive tracking:</p>
+        <ol className="list-decimal pl-6">
+          <li><strong>Engine Operations</strong>: Complete request lifecycle from start to completion</li>
+          <li><strong>LLM Operations</strong>: Input prompts, outputs, timing, and performance metrics</li>
+          <li><strong>Handler Operations</strong>: Input/output tracking, execution times, success rates</li>
+          <li><strong>Memory Operations</strong>: Retrieval patterns, injection sources, context usage</li>
+          <li><strong>User Context</strong>: All operations tagged with user_id, unit_id, unit_name</li>
+          <li><strong>Performance Metrics</strong>: Execution times, throughput, latency, success/failure rates</li>
+          <li><strong>Error Tracking</strong>: Error types, messages, context at time of error, stack traces</li>
+        </ol>
+
+        <h4 className="text-lg font-semibold mt-6">Advanced Usage</h4>
+        <p>Access Weave functionality directly through the Strukt instance:</p>
+        <CodeBlock className="code-block" language="python" filename="weave_advanced.py" showExample={true} code={`# Check if Weave is available
+if ai.is_weave_available():
+    print("Weave logging is enabled")
+    
+    # Get project information
+    project_name, environment = ai.get_weave_project_info()
+    print(f"Project: {project_name}-{environment}")
+
+# Create custom Weave operations
+@ai.create_weave_op(name="custom_operation")
+def my_custom_function():
+    pass
+
+# Use context managers for user tracking
+with ai.weave_context(user_id="user1", unit_id="unit1"):
+    # Operations tracked with user context
+    pass
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Installation</h4>
+        <p>Install Weave as an optional dependency:</p>
+        <CodeBlock className="code-block" language="bash" filename="weave_install.sh" showExample={true} code={`# Install with Weave support
+pip install struktx[weave]
+
+# Or install Weave separately
+pip install weave
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Best Practices</h4>
+        <ol className="list-decimal pl-6">
+          <li><strong>Project Naming</strong>: Use descriptive project names that reflect your application</li>
+          <li><strong>Environment Separation</strong>: Use different environments for development, staging, and production</li>
+          <li><strong>User Context</strong>: Always provide user context for better tracking and debugging</li>
+          <li><strong>Custom Operations</strong>: Decorate important business logic functions for detailed tracking</li>
+          <li><strong>Error Handling</strong>: Weave automatically tracks errors, but ensure proper exception handling</li>
+          <li><strong>Performance Monitoring</strong>: Use the tracked metrics to identify bottlenecks and optimize performance</li>
+        </ol>
+      </section>
+
       <section id="memory-extraction" className="section">
         <h3 className="text-xl font-semibold">Memory Extraction Middleware</h3>
         <p>Automatically extracts durable facts from conversations and stores them in your memory engine (e.g., Upstash Vector). On subsequent requests, <code>MemoryAugmentedLLMClient</code> retrieves relevant items and prepends them to prompts.</p>
