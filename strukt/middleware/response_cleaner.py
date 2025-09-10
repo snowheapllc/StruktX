@@ -75,7 +75,7 @@ class ResponseCleanerMiddleware(Middleware):
                         response=cleaned_response, status=result.status
                     )
             except Exception as e:
-                self._log.warning(f"Error cleaning response: {e}")
+                self._log.warn(f"Error cleaning response: {e}")
 
         return result
 

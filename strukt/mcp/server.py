@@ -54,7 +54,7 @@ class MCPServerApp:
                     normalized_schema = _normalize_schema_for_mcp(t.output_schema)
                     tool_spec["outputSchema"] = normalized_schema
                 except Exception as e:
-                    _log.warning(
+                    _log.warn(
                         f"Failed to normalize output schema for tool {t.name}: {e}"
                     )
                     # Skip outputSchema if normalization fails
