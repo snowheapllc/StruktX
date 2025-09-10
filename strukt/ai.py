@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from typing import Dict, List, Optional
 
@@ -35,9 +36,28 @@ class Strukt:
         results = self._engine.run(state)
         responses = [r.response for r in results if r and r.response]
         query_types = [r.status for r in results if r and r.status]
-        combined = (
-            ". ".join([s.strip().rstrip(". ") for s in responses]) if responses else ""
-        )
+        # Handle both string and dict responses
+        if len(responses) == 1 and isinstance(responses[0], dict):
+            # For single dict response, return the entire dict structure
+            combined = responses[0]
+        else:
+            # For multiple responses or string responses, process as before
+            processed_responses = []
+            for s in responses:
+                if isinstance(s, dict):
+                    # For dict responses in multi-response scenarios, extract message or convert to JSON
+                    if 'message' in s and isinstance(s['message'], str):
+                        processed_responses.append(s['message'].strip().rstrip(". "))
+                    else:
+                        processed_responses.append(json.dumps(s))
+                elif isinstance(s, str):
+                    processed_responses.append(s.strip().rstrip(". "))
+                else:
+                    processed_responses.append(str(s))
+            
+            combined = (
+                ". ".join(processed_responses) if processed_responses else ""
+            )
         if len(query_types) > 1:
             query_type = StruktQueryEnum.MULTIPLE
         elif query_types:
