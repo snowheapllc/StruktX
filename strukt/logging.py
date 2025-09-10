@@ -283,6 +283,16 @@ class StruktLogger:
             border_style="yellow",
         )
         self._console.print(panel)
+    
+    def warning(self, message: str) -> None:
+        if not self._should("warn"):
+            return
+        panel = Panel(
+            self._maybe_truncate(message),
+            title=f"⚠️ [bold yellow]{self._name}[/bold yellow] WARN",
+            border_style="yellow",
+        )
+        self._console.print(panel)
 
     def error(self, message: str) -> None:
         if not self._should("error"):
