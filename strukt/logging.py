@@ -283,7 +283,7 @@ class StruktLogger:
             border_style="yellow",
         )
         self._console.print(panel)
-    
+
     def warning(self, message: str) -> None:
         if not self._should("warn"):
             return
