@@ -46,18 +46,16 @@ class Strukt:
             for s in responses:
                 if isinstance(s, dict):
                     # For dict responses in multi-response scenarios, extract message or convert to JSON
-                    if 'message' in s and isinstance(s['message'], str):
-                        processed_responses.append(s['message'].strip().rstrip(". "))
+                    if "message" in s and isinstance(s["message"], str):
+                        processed_responses.append(s["message"].strip().rstrip(". "))
                     else:
                         processed_responses.append(json.dumps(s))
                 elif isinstance(s, str):
                     processed_responses.append(s.strip().rstrip(". "))
                 else:
                     processed_responses.append(str(s))
-            
-            combined = (
-                ". ".join(processed_responses) if processed_responses else ""
-            )
+
+            combined = ". ".join(processed_responses) if processed_responses else ""
         if len(query_types) > 1:
             query_type = StruktQueryEnum.MULTIPLE
         elif query_types:

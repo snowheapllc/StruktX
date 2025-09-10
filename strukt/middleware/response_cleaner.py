@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import inflect
 from functools import lru_cache
@@ -71,11 +70,13 @@ class ResponseCleanerMiddleware(Middleware):
                 if isinstance(result.response, dict):
                     # For dict responses, clean only the message field if it exists
                     response_dict = result.response.copy()
-                    if 'message' in response_dict and isinstance(response_dict['message'], str):
-                        original_message = response_dict['message']
+                    if "message" in response_dict and isinstance(
+                        response_dict["message"], str
+                    ):
+                        original_message = response_dict["message"]
                         cleaned_message = self._clean_response(original_message)
                         if cleaned_message != original_message:
-                            response_dict['message'] = cleaned_message
+                            response_dict["message"] = cleaned_message
                             self._log.debug(
                                 f"Cleaned message field for {query_type}: {original_message[:50]}... -> {cleaned_message[:50]}..."
                             )
