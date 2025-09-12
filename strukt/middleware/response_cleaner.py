@@ -66,16 +66,43 @@ class ResponseCleanerMiddleware(Middleware):
         """Clean and normalize the response text for better TTS pronunciation."""
         if result.response:
             try:
-                cleaned_response = self._clean_response(result.response)
-                if cleaned_response != result.response:
-                    self._log.debug(
-                        f"Cleaned response for {query_type}: {result.response[:50]}... -> {cleaned_response[:50]}..."
+                # Handle different response types appropriately
+                if isinstance(result.response, dict):
+                    # For dict responses, clean only the message field if it exists
+                    response_dict = result.response.copy()
+                    if "message" in response_dict and isinstance(
+                        response_dict["message"], str
+                    ):
+                        original_message = response_dict["message"]
+                        cleaned_message = self._clean_response(original_message)
+                        if cleaned_message != original_message:
+                            response_dict["message"] = cleaned_message
+                            self._log.debug(
+                                f"Cleaned message field for {query_type}: {original_message[:50]}... -> {cleaned_message[:50]}..."
+                            )
+                            return HandlerResult(
+                                response=response_dict, status=result.status
+                            )
+                    # Return original dict if no message field or no cleaning needed
+                    return result
+                elif isinstance(result.response, str):
+                    # For string responses, clean the entire response
+                    cleaned_response = self._clean_response(result.response)
+                    if cleaned_response != result.response:
+                        self._log.debug(
+                            f"Cleaned response for {query_type}: {result.response[:50]}... -> {cleaned_response[:50]}..."
+                        )
+                        return HandlerResult(
+                            response=cleaned_response, status=result.status
+                        )
+                else:
+                    # For other types, log a warning and return as-is
+                    self._log.warn(
+                        f"Response type {type(result.response).__name__} not handled by response cleaner for {query_type}"
                     )
-                    return HandlerResult(
-                        response=cleaned_response, status=result.status
-                    )
+                    return result
             except Exception as e:
-                self._log.warning(f"Error cleaning response: {e}")
+                self._log.warn(f"Error cleaning response: {e}")
 
         return result
 

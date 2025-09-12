@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 
 class StruktQueryEnum:
@@ -44,7 +44,7 @@ class HandlerResult:
 
 @dataclass
 class StruktResponse:
-    response: str
+    response: Union[str, Dict[str, Any]]
     query_type: str
     query_types: List[str]
     parts: List[str]
@@ -54,7 +54,7 @@ class StruktResponse:
 class BackgroundTaskResult(TypedDict):
     """Result of a background task."""
 
-    response: str
+    response: Union[str, Dict[str, Any]]
     status: str
 
 

@@ -250,7 +250,9 @@ class Engine:
             component_label = self._get_component_label()
 
             # Apply tracing to key methods with dynamic component label
-            self.run = strukt_trace(name="StruktX.Engine.run", call_display_name=f"{component_label}.run")(self.run)
+            self.run = strukt_trace(
+                name="StruktX.Engine.run", call_display_name=f"{component_label}.run"
+            )(self.run)
 
             self._classify = strukt_trace(
                 name="StruktX.Engine.classify",

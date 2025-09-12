@@ -37,7 +37,7 @@ class AWSSecretsManager:
         self._log = get_logger(__name__)
 
         if not BOTO3_AVAILABLE:
-            self._log.warning(
+            self._log.warn(
                 "boto3 not available, secrets will be fetched from environment variables"
             )
 
