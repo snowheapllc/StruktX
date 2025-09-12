@@ -274,8 +274,6 @@ class MCPServerApp:
             "isError": False,
         }
 
-
-
     def _call_tool_sync(self, tool_name: str, args: Dict[str, Any]) -> Any:
         """Synchronous tool calling logic."""
         spec = self._tools.get(tool_name)
