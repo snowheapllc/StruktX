@@ -69,6 +69,11 @@ def _wrap_result_to_mcp_content(result: Any) -> Any:
     if hasattr(result, "model_dump"):
         return result  # Return the Pydantic model directly
 
+    # Handle dataclasses - convert to dictionary
+    if hasattr(result, "__dataclass_fields__"):
+        from dataclasses import asdict
+        return asdict(result)
+
     # Handle dictionaries - return as-is for structured tools
     if isinstance(result, dict):
         return result
@@ -84,10 +89,10 @@ def _wrap_result_to_mcp_content(result: Any) -> Any:
 def _make_generic_callable(bound_handler: Handler) -> MCPCallable:
     def generic_callable(
         *, text: str, context: Dict[str, Any] | None = None, **_: Any
-    ) -> Dict[str, Any]:
+    ) -> HandlerResult:
         state = InvocationState(text=text, context=context or {})
         result: HandlerResult = bound_handler.handle(state, [text])
-        return {"content": [{"type": "text", "text": result.response}]}
+        return result
 
     return generic_callable
 
@@ -105,51 +110,58 @@ def _make_wrapped_callable(underlying: MCPCallable) -> MCPCallable:
     return call_wrapper
 
 
-def _normalize_schema_for_mcp(schema: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize a JSON schema to be MCP-compliant while preserving property types."""
-    if not isinstance(schema, dict):
-        return {"type": "object"}
-
-    normalized = schema.copy()
-
-    # MCP requires root-level output schemas to be "object" type
-    # But preserve property types within the object
-    if "type" in normalized:
-        normalized["type"] = "object"
-
-    # Recursively normalize nested schemas (but only object-type schemas with properties)
-    if "properties" in normalized and isinstance(normalized["properties"], dict):
-        for prop_name, prop_schema in normalized["properties"].items():
-            if isinstance(prop_schema, dict) and "properties" in prop_schema:
-                # Only normalize object schemas with nested properties
-                normalized["properties"][prop_name] = _normalize_schema_for_mcp(
-                    prop_schema
-                )
-
-    # Keep array items and normalize them
-    if "items" in normalized and isinstance(normalized["items"], dict):
-        normalized["items"] = _normalize_schema_for_mcp(normalized["items"])
-
-    # Handle additionalProperties
-    if "additionalProperties" in normalized and isinstance(
-        normalized["additionalProperties"], dict
-    ):
-        normalized["additionalProperties"] = _normalize_schema_for_mcp(
-            normalized["additionalProperties"]
-        )
-
-    return normalized
+# Removed _normalize_schema_for_mcp function - MCP SDK handles normalization automatically
 
 
 def _py_type_to_schema(tp: Any) -> Dict[str, Any]:
+
+    
     # Handle Pydantic models
     if hasattr(tp, "model_json_schema"):
         try:
             pydantic_schema = tp.model_json_schema()
-            # Normalize the Pydantic schema to ensure MCP compliance
-            return _normalize_schema_for_mcp(pydantic_schema)
+            return pydantic_schema
         except Exception:
             pass
+
+    # Handle dataclasses
+    if hasattr(tp, "__dataclass_fields__"):
+        try:
+            properties = {}
+            required = []
+            for field_name, field_info in tp.__dataclass_fields__.items():
+                field_type = field_info.type
+                field_schema = _py_type_to_schema(field_type)
+                properties[field_name] = field_schema
+                # Check if field has a default value
+                if field_info.default == field_info.default_factory == inspect._empty:
+                    required.append(field_name)
+            
+            schema = {
+                "type": "object",
+                "properties": properties
+            }
+            if required:
+                schema["required"] = required
+            return schema
+        except Exception as e:
+            print(f"DEBUG: Exception in dataclass handling: {e}")
+            pass
+
+    # Handle basic types - check string representation since type objects may differ
+    type_str = str(tp)
+    if type_str in ["<class 'str'>", "str"] or (hasattr(tp, '__name__') and tp.__name__ == 'str'):
+        return {"type": "string"}
+    elif type_str in ["<class 'int'>", "int"] or (hasattr(tp, '__name__') and tp.__name__ == 'int'):
+        return {"type": "integer"}
+    elif type_str in ["<class 'float'>", "float"] or (hasattr(tp, '__name__') and tp.__name__ == 'float'):
+        return {"type": "number"}
+    elif type_str in ["<class 'bool'>", "bool"] or (hasattr(tp, '__name__') and tp.__name__ == 'bool'):
+        return {"type": "boolean"}
+    elif type_str in ["<class 'list'>", "list"] or (hasattr(tp, '__name__') and tp.__name__ == 'list'):
+        return {"type": "array"}
+    elif type_str in ["<class 'dict'>", "dict"] or (hasattr(tp, '__name__') and tp.__name__ == 'dict'):
+        return {"type": "object"}
 
     # Handle Optional/Union by selecting the first non-None arg
     origin = get_origin(tp)
@@ -220,9 +232,9 @@ def _extract_output_schema(fn: MCPCallable) -> Dict[str, Any] | None:
         if return_type is None or return_type == inspect._empty:
             return None
         schema = _py_type_to_schema(return_type)
-        # Ensure the schema is MCP-compliant
-        return _normalize_schema_for_mcp(schema)
-    except Exception:
+        return schema
+    except Exception as e:
+
         return None
 
 

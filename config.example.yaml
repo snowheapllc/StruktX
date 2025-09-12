@@ -1,0 +1,39 @@
+# StruktX Configuration
+# Basic LLM configuration
+llm:
+  factory: "strukt.defaults:SimpleLLMClient"
+  params: {}
+
+# Memory configuration
+memory:
+  factory: null
+  params: {}
+  use_store: false
+  augment_llm: false
+
+# Handlers configuration
+handlers:
+  registry:
+    time: "strukt.examples.time_handler:TimeHandler"
+  handler_params:
+    time: {}
+  default_route: "time"
+
+# MCP Server configuration
+mcp:
+  enabled: true
+  server_name: "struktx-ai"
+  include_handlers:
+    - "time"
+  auth_api_key:
+    enabled: true
+    header_name: "x-api-key"
+    env_var: "STRUKTX_MCP_API_KEY"
+  default_consent_policy: "ask-once"
+  tools: {}
+
+# Extras configuration
+extras:
+  humanlayer:
+    enabled: false
+    params: {}

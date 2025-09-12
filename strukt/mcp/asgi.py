@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 from urllib.parse import unquote
+import asyncio
+import json
 
 from ..config import StruktConfig, ensure_config_types
 from ..ai import Strukt
@@ -26,7 +28,6 @@ def build_fastapi_app(
     try:
         from fastapi import FastAPI, Header, HTTPException, APIRouter, Request, Response
         from fastapi.responses import StreamingResponse
-        import json
     except Exception as e:  # pragma: no cover
         raise RuntimeError(
             "FastAPI is required to build MCP HTTP endpoints. Install fastapi."
@@ -40,7 +41,7 @@ def build_fastapi_app(
     mcp: Optional[MCPServerApp] = None
 
     @app.on_event("startup")
-    def _init_mcp() -> None:
+    async def _init_mcp() -> None:
         nonlocal mcp
         handlers = getattr(strukt_app._engine, "_handlers", {})  # type: ignore[attr-defined]
         memory = strukt_app.get_memory()
@@ -69,128 +70,26 @@ def build_fastapi_app(
         if not mcp.check_api_key({header_name: x_api_key or ""}):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-    def _normalize_json_schema(schema: Any) -> Dict[str, Any]:
-        """Normalize JSON schema to ensure MCP compliance while preserving correct types."""
-        if not isinstance(schema, dict):
-            return {"type": "object"}
 
-        # Create a copy to avoid modifying the original
-        normalized = schema.copy()
 
-        # Handle the type field specifically
-        if "type" in normalized:
-            type_value = normalized["type"]
-            # If type is a list/array, convert to single type
-            if isinstance(type_value, list):
-                # Prefer object, then string, then the first non-null type
-                if "object" in type_value:
-                    normalized["type"] = "object"
-                elif "string" in type_value:
-                    normalized["type"] = "string"
-                elif "array" in type_value:
-                    normalized["type"] = "array"
-                elif "integer" in type_value:
-                    normalized["type"] = "integer"
-                elif "number" in type_value:
-                    normalized["type"] = "number"
-                elif "boolean" in type_value:
-                    normalized["type"] = "boolean"
-                elif "null" in type_value and len(type_value) > 1:
-                    # Find first non-null type
-                    non_null_types = [t for t in type_value if t != "null"]
-                    normalized["type"] = (
-                        non_null_types[0] if non_null_types else "object"
-                    )
-                else:
-                    normalized["type"] = type_value[0] if type_value else "object"
-            # Keep valid JSON Schema types as-is
-            elif type_value in [
-                "null",
-                "boolean",
-                "object",
-                "array",
-                "number",
-                "string",
-                "integer",
-            ]:
-                # Don't change valid types
-                pass
-            else:
-                # Invalid type, default to object
-                normalized["type"] = "object"
-        else:
-            # No type specified, default to object
-            normalized["type"] = "object"
-
-        # Recursively normalize nested schemas
-        if "properties" in normalized and isinstance(normalized["properties"], dict):
-            for prop_name, prop_schema in normalized["properties"].items():
-                # Only normalize if the property schema is actually a complex schema
-                # Don't normalize simple property definitions that already have valid types
-                if isinstance(prop_schema, dict) and (
-                    "properties" in prop_schema
-                    or "items" in prop_schema
-                    or "additionalProperties" in prop_schema
-                ):
-                    normalized["properties"][prop_name] = _normalize_json_schema(
-                        prop_schema
-                    )
-
-        # Keep array items and normalize them
-        if "items" in normalized:
-            normalized["items"] = _normalize_json_schema(normalized["items"])
-
-        if "additionalProperties" in normalized and isinstance(
-            normalized["additionalProperties"], dict
-        ):
-            normalized["additionalProperties"] = _normalize_json_schema(
-                normalized["additionalProperties"]
-            )
-
-        return normalized
-
-    def _handle_mcp_request(
+    async def _handle_mcp_request(
         request_body: Dict[str, Any], request_id: Any
-    ) -> Dict[str, Any]:
-        """Handle MCP JSON-RPC request logic."""
-        # Validate JSON-RPC request structure
-        if not isinstance(request_body, dict):
-            return {
-                "jsonrpc": "2.0",
-                "id": 0,
-                "error": {
-                    "code": -32600,
-                    "message": "Invalid Request: body must be an object",
-                },
-            }
-
-        jsonrpc = request_body.get("jsonrpc")
-        method = request_body.get("method")
-        params = request_body.get("params")
-
-        if jsonrpc != "2.0":
+    ) -> Dict[str, Any] | None:
+        """Handle MCP JSON-RPC request using the official MCP server."""
+        if not mcp:
             return {
                 "jsonrpc": "2.0",
                 "id": request_id if request_id is not None else 0,
-                "error": {
-                    "code": -32600,
-                    "message": "Invalid Request: jsonrpc must be '2.0'",
-                },
+                "error": {"code": -32603, "message": "MCP server not initialized"},
             }
 
-        if not method:
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id if request_id is not None else 0,
-                "error": {
-                    "code": -32600,
-                    "message": "Invalid Request: method is required",
-                },
-            }
-
-        # Handle MCP initialization
-        if method == "initialize":
-            try:
+        try:
+            # For now, fall back to the existing methods until we can properly integrate
+            # the official MCP server's transport layer
+            method = request_body.get("method")
+            params = request_body.get("params", {})
+            
+            if method == "initialize":
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id if request_id is not None else 0,
@@ -203,195 +102,57 @@ def build_fastapi_app(
                             "sampling": {},
                         },
                         "serverInfo": {
-                            "name": cfg.mcp.server_name or "strukt-mcp-server",
+                            "name": mcp.server_name,
                             "version": "1.0.0",
                         },
                     },
                 }
-            except Exception as e:
+            elif method == "notifications/initialized":
+                # Notification, no response needed
+                return None
+            elif method == "tools/list":
+                tools = mcp.list_tools()
                 return {
-                    "jsonrpc": "2.0",
-                    "id": request_id if request_id is not None else 0,
-                    "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
-                }
-
-        # Handle initialized notification (no response needed)
-        elif method == "notifications/initialized":
-            # This is a notification, no response needed
-            return None
-
-        elif method == "tools/list":
-            try:
-                tools_raw = mcp.list_tools()
-                # Debug: Print the raw tools to see what we're working with
-                print(f"DEBUG: Found {len(tools_raw)} raw tools")
-                for i, tool in enumerate(tools_raw):
-                    print(
-                        f"DEBUG: Tool {i}: {tool.get('name', 'unnamed')} - outputSchema: {tool.get('outputSchema', 'none')}"
-                    )
-
-                # Fix outputSchema to ensure proper JSON schema format
-                tools = []
-                for i, tool in enumerate(tools_raw):
-                    tool_copy = tool.copy()
-
-                    # Remove outputSchema completely if it's problematic, or normalize it
-                    if "outputSchema" in tool_copy:
-                        output_schema = tool_copy["outputSchema"]
-                        if output_schema:
-                            try:
-                                # Normalize the schema to ensure MCP compliance
-                                normalized_schema = _normalize_json_schema(
-                                    output_schema
-                                )
-                                print(
-                                    f"DEBUG: Tool {i} normalized schema: {normalized_schema}"
-                                )
-                                tool_copy["outputSchema"] = normalized_schema
-                            except Exception as e:
-                                # If normalization fails, remove outputSchema entirely
-                                print(
-                                    f"WARNING: Failed to normalize schema for tool {i} ({tool.get('name', 'unknown')}): {e}"
-                                )
-                                print(f"Original schema: {output_schema}")
-                                del tool_copy["outputSchema"]
-                        else:
-                            # Remove empty outputSchema
-                            del tool_copy["outputSchema"]
-
-                    tools.append(tool_copy)
-
-                # Final debug output
-                print(f"DEBUG: Returning {len(tools)} tools")
-                for i, tool in enumerate(tools):
-                    print(
-                        f"DEBUG: Final tool {i}: {tool.get('name', 'unnamed')} - has outputSchema: {'outputSchema' in tool}"
-                    )
-
-                result = {
                     "jsonrpc": "2.0",
                     "id": request_id if request_id is not None else 0,
                     "result": {"tools": tools},
                 }
-
-                # Debug: Print the complete JSON response
-                import json as json_module
-
-                print(
-                    f"DEBUG: Complete tools/list response: {json_module.dumps(result, indent=2)}"
-                )
-
-                return result
-            except Exception as e:
-                print(f"ERROR in tools/list: {e}")
-                import traceback
-
-                traceback.print_exc()
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id if request_id is not None else 0,
-                    "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
-                }
-
-        elif method == "tools/call":
-            if not params:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id if request_id is not None else 0,
-                    "error": {"code": -32602, "message": "Missing params"},
-                }
-
-            tool_name = params.get("name")
-            arguments = params.get("arguments", {})
-
-            if not tool_name:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id if request_id is not None else 0,
-                    "error": {"code": -32602, "message": "Missing tool name"},
-                }
-
-            try:
-                result = mcp.call_tool(tool_name=tool_name, args=arguments)
+            elif method == "tools/call":
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                if not tool_name:
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": request_id if request_id is not None else 0,
+                        "error": {"code": -32602, "message": "Missing tool name"},
+                    }
+                
+                result = await mcp.call_tool(tool_name=tool_name, args=arguments)
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id if request_id is not None else 0,
                     "result": result,
                 }
-            except ValueError as e:
+            elif method in ["prompts/list", "resources/list"]:
+                # Return empty lists for unsupported features
+                resource_type = "prompts" if "prompts" in method else "resources"
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id if request_id is not None else 0,
-                    "error": {"code": -32602, "message": str(e)},
+                    "result": {resource_type: []},
                 }
-            except Exception as e:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
-                }
-
-        # Handle prompts
-        elif method == "prompts/list":
-            try:
+            else:
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id if request_id is not None else 0,
-                    "result": {
-                        "prompts": []  # No prompts implemented yet
-                    },
+                    "error": {"code": -32601, "message": f"Method not found: {method}"},
                 }
-            except Exception as e:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id if request_id is not None else 0,
-                    "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
-                }
-
-        elif method == "prompts/get":
+            
+        except Exception as e:
             return {
                 "jsonrpc": "2.0",
                 "id": request_id if request_id is not None else 0,
-                "error": {"code": -32602, "message": "No prompts available"},
-            }
-
-        # Handle resources
-        elif method == "resources/list":
-            try:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id if request_id is not None else 0,
-                    "result": {
-                        "resources": []  # No resources implemented yet
-                    },
-                }
-            except Exception as e:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id if request_id is not None else 0,
-                    "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
-                }
-
-        elif method == "resources/read":
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id if request_id is not None else 0,
-                "error": {"code": -32602, "message": "No resources available"},
-            }
-
-        # Handle sampling
-        elif method == "sampling/createMessage":
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id if request_id is not None else 0,
-                "error": {"code": -32601, "message": "Sampling not implemented"},
-            }
-
-        else:
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id if request_id is not None else 0,
-                "error": {"code": -32601, "message": f"Method not found: {method}"},
+                "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
             }
 
     @router.get("")
@@ -429,8 +190,9 @@ def build_fastapi_app(
 
                     if request_data:
                         request_id = request_data.get("id")
-                        result = _handle_mcp_request(request_data, request_id)
-                        yield f"data: {json.dumps(result)}\n\n"
+                        result = await _handle_mcp_request(request_data, request_id)
+                        if result is not None:
+                            yield f"data: {json.dumps(result)}\n\n"
                     else:
                         error_response = {
                             "jsonrpc": "2.0",
@@ -479,10 +241,11 @@ def build_fastapi_app(
                 try:
                     request_data = json.loads(request_param)
                     request_id = request_data.get("id")
-                    result = _handle_mcp_request(request_data, request_id)
-                    return Response(
-                        content=json.dumps(result), media_type="application/json"
-                    )
+                    result = await _handle_mcp_request(request_data, request_id)
+                    if result is not None:
+                        return Response(
+                            content=json.dumps(result), media_type="application/json"
+                        )
                 except json.JSONDecodeError:
                     pass
 
@@ -566,7 +329,7 @@ def build_fastapi_app(
                             try:
                                 request_body = json.loads(body_data.decode("utf-8"))
                                 request_id = request_body.get("id")
-                                result = _handle_mcp_request(request_body, request_id)
+                                result = await _handle_mcp_request(request_body, request_id)
 
                                 if result is not None:
                                     response_body = json.dumps(result).encode()
@@ -714,8 +477,11 @@ def build_fastapi_app(
 
                 if request_body:
                     request_id = request_body.get("id")
-                    result = _handle_mcp_request(request_body, request_id)
-                    response_body = json.dumps(result).encode()
+                    result = await _handle_mcp_request(request_body, request_id)
+                    if result is not None:
+                        response_body = json.dumps(result).encode()
+                    else:
+                        response_body = b""
                 else:
                     response_body = json.dumps(
                         {

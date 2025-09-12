@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import yaml
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -155,6 +156,45 @@ class StruktConfig:
     tracing: TracingConfig = field(default_factory=TracingConfig)
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     middleware: List[MiddlewareConfig] = field(default_factory=list)
+
+    @classmethod
+    def from_file(cls, file_path: str) -> "StruktConfig":
+        """Load configuration from a YAML file."""
+        with open(file_path, 'r') as f:
+            data = yaml.safe_load(f)
+        
+        # Create config with defaults
+        config = cls()
+        
+        # Update with loaded data
+        if data:
+            config = cls._update_from_dict(config, data)
+        
+        return config
+    
+    @classmethod
+    def _update_from_dict(cls, config: "StruktConfig", data: Dict[str, Any]) -> "StruktConfig":
+        """Update config object with data from dictionary."""
+        for key, value in data.items():
+            if hasattr(config, key):
+                attr = getattr(config, key)
+                if isinstance(value, dict) and hasattr(attr, '__dict__'):
+                    # Recursively update nested config objects
+                    cls._update_nested_config(attr, value)
+                else:
+                    setattr(config, key, value)
+        return config
+    
+    @staticmethod
+    def _update_nested_config(config_obj: Any, data: Dict[str, Any]) -> None:
+        """Update nested configuration objects."""
+        for key, value in data.items():
+            if hasattr(config_obj, key):
+                attr = getattr(config_obj, key)
+                if isinstance(value, dict) and hasattr(attr, '__dict__'):
+                    StruktConfig._update_nested_config(attr, value)
+                else:
+                    setattr(config_obj, key, value)
 
 
 # Helper functions to coerce user-friendly dict inputs into dataclasses
