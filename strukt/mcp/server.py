@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from mcp.server import Server
-from mcp.server.models import InitializationOptions
-from mcp.types import Tool, TextContent, CallToolResult
+from mcp.types import Tool, TextContent
 
 from ..interfaces import Handler, MemoryEngine
 from ..logging import get_logger
@@ -37,44 +35,52 @@ class MCPServerApp:
         self._include_handlers = include_handlers
         self._memory = memory
         self._api_key_auth = api_key_auth
-        
+
         # Initialize official MCP server
         self._server = Server(server_name)
-        
+
         # Build tools with default consent policy from config provided by host later
         self._tools: Dict[str, ToolSpec] = build_tools_from_handlers(
             handlers=handlers, include=include_handlers, mcp_config=None
         )
         self._consent = ConsentStore(memory)
         self._authz = APIKeyAuthorizer(api_key_auth)
-        
+
         # Register tools with the official MCP server
         self._register_tools_with_server()
 
     def _register_tools_with_server(self) -> None:
         """Register all tools with the official MCP server."""
+
         # Register list_tools handler
         @self._server.list_tools()
         async def handle_list_tools() -> list[Tool]:
             tools = []
             for tool_name, tool_spec in self._tools.items():
-                tools.append(Tool(
-                    name=tool_name,
-                    description=tool_spec.description,
-                    inputSchema=tool_spec.input_schema
-                ))
+                tools.append(
+                    Tool(
+                        name=tool_name,
+                        description=tool_spec.description,
+                        inputSchema=tool_spec.input_schema,
+                    )
+                )
             return tools
-        
+
         # Register call_tool handler
         @self._server.call_tool()
         async def handle_call_tool(name: str, arguments: dict) -> list[TextContent]:
             if name in self._tools:
                 try:
                     result = self._call_tool_sync(name, arguments)
-                    formatted_result = self._format_tool_result(name, self._tools[name], result)
-                    
+                    formatted_result = self._format_tool_result(
+                        name, self._tools[name], result
+                    )
+
                     # Extract text content from formatted result
-                    if isinstance(formatted_result, dict) and "content" in formatted_result:
+                    if (
+                        isinstance(formatted_result, dict)
+                        and "content" in formatted_result
+                    ):
                         content_items = formatted_result["content"]
                         if content_items and isinstance(content_items[0], dict):
                             text_content = content_items[0].get("text", str(result))
@@ -82,7 +88,7 @@ class MCPServerApp:
                             text_content = str(result)
                     else:
                         text_content = str(result)
-                    
+
                     return [TextContent(type="text", text=text_content)]
                 except Exception as e:
                     return [TextContent(type="text", text=f"Error: {str(e)}")]
@@ -170,7 +176,7 @@ class MCPServerApp:
         # Validate API key - now enforced for all requests
         if not api_key:
             raise PermissionError("API key is required for all MCP requests")
-        
+
         if not self._authz.is_authorized({self._api_key_auth.header_name: api_key}):
             raise PermissionError("Invalid API key")
 
@@ -199,27 +205,21 @@ class MCPServerApp:
             _log.error(f"Tool '{name}' execution failed: {e}")
             raise
 
-
-
-    def _format_tool_result(self, tool_name: str, spec: ToolSpec, result: Any) -> Dict[str, Any]:
+    def _format_tool_result(
+        self, tool_name: str, spec: ToolSpec, result: Any
+    ) -> Dict[str, Any]:
         """Format tool result according to MCP standards."""
         # Debug: Log what we got from the tool
         print(f"DEBUG call_tool: {tool_name} returned type: {type(result)}")
         print(f"DEBUG call_tool: {tool_name} result: {result}")
 
         # Check if this tool has an output schema (indicating structured output expected)
-        has_output_schema = (
-            hasattr(spec, "output_schema") and spec.output_schema
-        )
-        print(
-            f"DEBUG call_tool: {tool_name} has_output_schema: {has_output_schema}"
-        )
+        has_output_schema = hasattr(spec, "output_schema") and spec.output_schema
+        print(f"DEBUG call_tool: {tool_name} has_output_schema: {has_output_schema}")
 
         # If result is already in MCP format, return as-is
         if isinstance(result, dict) and "content" in result:
-            print(
-                f"DEBUG call_tool: {tool_name} returning pre-formatted MCP result"
-            )
+            print(f"DEBUG call_tool: {tool_name} returning pre-formatted MCP result")
             return result
 
         # For tools with output schema, return structured data
@@ -233,9 +233,7 @@ class MCPServerApp:
                 )
             elif isinstance(result, (dict, list, tuple)):
                 structured_result = (
-                    result
-                    if isinstance(result, dict)
-                    else {"data": list(result)}
+                    result if isinstance(result, dict) else {"data": list(result)}
                 )
                 print(
                     f"DEBUG call_tool: {tool_name} dict/list result: {structured_result}"
@@ -249,9 +247,7 @@ class MCPServerApp:
             # For MCP structured content, use structuredContent field
             # Also include JSON text representation for backwards compatibility
             try:
-                text_repr = json.dumps(
-                    structured_result, indent=2, ensure_ascii=False
-                )
+                text_repr = json.dumps(structured_result, indent=2, ensure_ascii=False)
             except (TypeError, ValueError):
                 text_repr = str(structured_result)
             content = [{"type": "text", "text": text_repr}]
@@ -278,23 +274,8 @@ class MCPServerApp:
             "isError": False,
         }
 
-    # Hosting layer invokes this to run the tool after auth+consent
-    def call_tool(self, *, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Call a tool by name with arguments.
 
-        Args:
-            tool_name: Tool name
-            args: Tool arguments
 
-        Returns:
-            Tool execution result in MCP format
-
-        Raises:
-            ValueError: If tool not found or arguments invalid
-        """
-        return self._format_tool_result(tool_name, self._tools.get(tool_name), 
-                                       self._call_tool_sync(tool_name, args))
-    
     def _call_tool_sync(self, tool_name: str, args: Dict[str, Any]) -> Any:
         """Synchronous tool calling logic."""
         spec = self._tools.get(tool_name)

@@ -72,6 +72,7 @@ def _wrap_result_to_mcp_content(result: Any) -> Any:
     # Handle dataclasses - convert to dictionary
     if hasattr(result, "__dataclass_fields__"):
         from dataclasses import asdict
+
         return asdict(result)
 
     # Handle dictionaries - return as-is for structured tools
@@ -114,8 +115,6 @@ def _make_wrapped_callable(underlying: MCPCallable) -> MCPCallable:
 
 
 def _py_type_to_schema(tp: Any) -> Dict[str, Any]:
-
-    
     # Handle Pydantic models
     if hasattr(tp, "model_json_schema"):
         try:
@@ -136,11 +135,8 @@ def _py_type_to_schema(tp: Any) -> Dict[str, Any]:
                 # Check if field has a default value
                 if field_info.default == field_info.default_factory == inspect._empty:
                     required.append(field_name)
-            
-            schema = {
-                "type": "object",
-                "properties": properties
-            }
+
+            schema = {"type": "object", "properties": properties}
             if required:
                 schema["required"] = required
             return schema
@@ -150,17 +146,29 @@ def _py_type_to_schema(tp: Any) -> Dict[str, Any]:
 
     # Handle basic types - check string representation since type objects may differ
     type_str = str(tp)
-    if type_str in ["<class 'str'>", "str"] or (hasattr(tp, '__name__') and tp.__name__ == 'str'):
+    if type_str in ["<class 'str'>", "str"] or (
+        hasattr(tp, "__name__") and tp.__name__ == "str"
+    ):
         return {"type": "string"}
-    elif type_str in ["<class 'int'>", "int"] or (hasattr(tp, '__name__') and tp.__name__ == 'int'):
+    elif type_str in ["<class 'int'>", "int"] or (
+        hasattr(tp, "__name__") and tp.__name__ == "int"
+    ):
         return {"type": "integer"}
-    elif type_str in ["<class 'float'>", "float"] or (hasattr(tp, '__name__') and tp.__name__ == 'float'):
+    elif type_str in ["<class 'float'>", "float"] or (
+        hasattr(tp, "__name__") and tp.__name__ == "float"
+    ):
         return {"type": "number"}
-    elif type_str in ["<class 'bool'>", "bool"] or (hasattr(tp, '__name__') and tp.__name__ == 'bool'):
+    elif type_str in ["<class 'bool'>", "bool"] or (
+        hasattr(tp, "__name__") and tp.__name__ == "bool"
+    ):
         return {"type": "boolean"}
-    elif type_str in ["<class 'list'>", "list"] or (hasattr(tp, '__name__') and tp.__name__ == 'list'):
+    elif type_str in ["<class 'list'>", "list"] or (
+        hasattr(tp, "__name__") and tp.__name__ == "list"
+    ):
         return {"type": "array"}
-    elif type_str in ["<class 'dict'>", "dict"] or (hasattr(tp, '__name__') and tp.__name__ == 'dict'):
+    elif type_str in ["<class 'dict'>", "dict"] or (
+        hasattr(tp, "__name__") and tp.__name__ == "dict"
+    ):
         return {"type": "object"}
 
     # Handle Optional/Union by selecting the first non-None arg
@@ -233,8 +241,7 @@ def _extract_output_schema(fn: MCPCallable) -> Dict[str, Any] | None:
             return None
         schema = _py_type_to_schema(return_type)
         return schema
-    except Exception as e:
-
+    except Exception:
         return None
 
 

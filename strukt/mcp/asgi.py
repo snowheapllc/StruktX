@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 from urllib.parse import unquote
-import asyncio
 import json
 
 from ..config import StruktConfig, ensure_config_types
@@ -70,8 +69,6 @@ def build_fastapi_app(
         if not mcp.check_api_key({header_name: x_api_key or ""}):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-
-
     async def _handle_mcp_request(
         request_body: Dict[str, Any], request_id: Any
     ) -> Dict[str, Any] | None:
@@ -88,7 +85,7 @@ def build_fastapi_app(
             # the official MCP server's transport layer
             method = request_body.get("method")
             params = request_body.get("params", {})
-            
+
             if method == "initialize":
                 return {
                     "jsonrpc": "2.0",
@@ -126,7 +123,7 @@ def build_fastapi_app(
                         "id": request_id if request_id is not None else 0,
                         "error": {"code": -32602, "message": "Missing tool name"},
                     }
-                
+
                 result = await mcp.call_tool(tool_name=tool_name, args=arguments)
                 return {
                     "jsonrpc": "2.0",
@@ -147,7 +144,7 @@ def build_fastapi_app(
                     "id": request_id if request_id is not None else 0,
                     "error": {"code": -32601, "message": f"Method not found: {method}"},
                 }
-            
+
         except Exception as e:
             return {
                 "jsonrpc": "2.0",
@@ -329,7 +326,9 @@ def build_fastapi_app(
                             try:
                                 request_body = json.loads(body_data.decode("utf-8"))
                                 request_id = request_body.get("id")
-                                result = await _handle_mcp_request(request_body, request_id)
+                                result = await _handle_mcp_request(
+                                    request_body, request_id
+                                )
 
                                 if result is not None:
                                     response_body = json.dumps(result).encode()
