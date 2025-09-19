@@ -73,7 +73,6 @@ class StruktLogger:
             # Initialize Weave with the project - disable autopatching to prevent LangChain noise
             weave.init(
                 project_name=f"{self._weave_project_name}-{self._weave_environment}",
-                autopatch_settings={"disable_autopatch": True},
             )
             # Update global state
             global \
