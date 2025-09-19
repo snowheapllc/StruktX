@@ -12,6 +12,7 @@ Factory = Union[str, Callable[..., Any]]
 class LLMClientConfig:
     factory: Optional[Factory] = None  # if None, use a minimal default lc client
     params: Dict[str, Any] = field(default_factory=dict)
+    retry: Optional[Dict[str, Any]] = None  # retry configuration
 
 
 @dataclass

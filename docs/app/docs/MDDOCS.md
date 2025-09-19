@@ -545,6 +545,274 @@ log.info("Hello logs")
 
 Augmented memory injections appear under the `memory` logger with the provided `augment_source` label.
 
+### LLM Retry Mechanism
+
+StruktX includes built-in retry functionality for LLM calls to handle transient failures and improve reliability. The retry mechanism supports both synchronous and asynchronous LLM operations with configurable backoff strategies.
+
+#### Configuration
+
+Enable retry functionality in your LLM client configuration:
+
+```python
+from strukt import StruktConfig, LLMClientConfig
+
+config = StruktConfig(
+    llm=LLMClientConfig(
+        factory="langchain_openai:ChatOpenAI",
+        params=dict(
+            model="gpt-4o-mini",
+            api_key="your-api-key",
+            base_url="https://api.openai.com/v1"
+        ),
+        retry={
+            "max_retries": 3,
+            "base_delay": 1.0,
+            "max_delay": 30.0,
+            "exponential_base": 2.0,
+            "jitter": True,
+            "retryable_exceptions": (Exception,),  # Retry on any exception
+        }
+    )
+)
+```
+
+#### Retry Parameters
+
+- **max_retries**: Maximum number of retry attempts (default: 3)
+- **base_delay**: Initial delay between retries in seconds (default: 1.0)
+- **max_delay**: Maximum delay between retries in seconds (default: 30.0)
+- **exponential_base**: Base for exponential backoff (default: 2.0)
+- **jitter**: Add random jitter to prevent thundering herd (default: True)
+- **retryable_exceptions**: Tuple of exception types to retry on (default: (Exception,))
+
+#### Supported Operations
+
+The retry mechanism automatically applies to all LLM operations:
+
+- `invoke()` - Text generation
+- `structured()` - Structured output generation
+- `ainvoke()` - Async text generation
+- `astructured()` - Async structured output generation
+
+#### Example Usage
+
+```python
+from strukt import create, StruktConfig, LLMClientConfig
+
+# Configure with retry
+config = StruktConfig(
+    llm=LLMClientConfig(
+        factory="langchain_openai:ChatOpenAI",
+        params=dict(model="gpt-4o-mini"),
+        retry={
+            "max_retries": 2,
+            "base_delay": 0.5,
+            "max_delay": 10.0,
+            "jitter": True
+        }
+    )
+)
+
+app = create(config)
+
+# All LLM calls will automatically retry on failure
+result = app.invoke("Hello, world!")
+```
+
+### Intent Caching
+
+StruktX provides intelligent caching for handler results based on semantic similarity of user queries. This reduces redundant processing and improves response times for similar requests.
+
+#### Features
+
+- **Semantic Matching**: Cache entries are matched based on meaning, not exact text
+- **Fast Track Caching**: Immediate in-memory caching for exact matches
+- **Configurable TTL**: Time-to-live settings per handler type
+- **Scoped Caching**: Cache entries can be scoped by user, unit, or globally
+- **Pretty Logging**: Rich console output for cache hits, misses, and stores
+
+#### Configuration
+
+Enable intent caching in your StruktX configuration:
+
+```python
+from strukt import StruktConfig, HandlersConfig
+from strukt.memory import InMemoryIntentCacheEngine, IntentCacheConfig, HandlerCacheConfig, CacheStrategy, CacheScope
+
+# Create intent cache configuration
+intent_cache_config = IntentCacheConfig(
+    enabled=True,
+    default_strategy=CacheStrategy.SEMANTIC,
+    default_ttl_seconds=3600,
+    similarity_threshold=0.7,
+    max_entries_per_handler=1000,
+    handler_configs={
+        "WeatherHandler": HandlerCacheConfig(
+            handler_name="WeatherHandler",
+            strategy=CacheStrategy.SEMANTIC,
+            scope=CacheScope.USER,
+            ttl_seconds=1800,
+            max_entries=500,
+            similarity_threshold=0.6,
+            enable_fast_track=True
+        ),
+        "DeviceHandler": HandlerCacheConfig(
+            handler_name="DeviceHandler",
+            strategy=CacheStrategy.SEMANTIC,
+            scope=CacheScope.USER,
+            ttl_seconds=1800,
+            max_entries=500,
+            similarity_threshold=0.8,
+            enable_fast_track=True
+        )
+    }
+)
+
+# Create cache engine
+intent_cache_engine = InMemoryIntentCacheEngine(intent_cache_config)
+
+# Configure handlers with caching
+config = StruktConfig(
+    handlers=HandlersConfig(
+        registry={
+            "weather_service": CachedWeatherHandler,
+            "device_control": CachedDeviceHandler,
+        },
+        handler_params={
+            "weather_service": dict(intent_cache_engine=intent_cache_engine),
+            "device_control": dict(intent_cache_engine=intent_cache_engine),
+        }
+    )
+)
+```
+
+#### Cache Strategies
+
+- **EXACT**: Match exact text queries
+- **SEMANTIC**: Match based on semantic similarity
+- **FUZZY**: Match with fuzzy string matching
+- **HYBRID**: Combine multiple strategies
+
+#### Cache Scopes
+
+- **GLOBAL**: Cache entries visible to all users
+- **USER**: Cache entries scoped to specific users
+- **UNIT**: Cache entries scoped to specific units
+- **SESSION**: Cache entries scoped to specific sessions
+
+#### Cache Management
+
+```python
+# Get cache statistics
+stats = intent_cache_engine.get_stats()
+print(f"Hit rate: {stats.hit_rate:.2%}")
+
+# Clean up expired entries
+cleanup_stats = intent_cache_engine.cleanup()
+print(f"Removed {cleanup_stats.expired_entries} expired entries")
+
+# Clear all cache entries
+intent_cache_engine.clear()
+```
+
+#### Cache Management API Endpoints
+
+When using StruktX with FastAPI, you can expose cache management endpoints:
+
+```python
+from fastapi import FastAPI
+from strukt import build_fastapi_app
+
+app = FastAPI()
+strukt_app = create(config)
+build_fastapi_app(strukt_app, config, app=app)
+
+# Cache management endpoints are automatically available:
+# GET /cache/stats - Get cache statistics
+# POST /cache/cleanup - Clean up expired entries
+# DELETE /cache/clear - Clear all cache entries
+```
+
+Example usage with curl:
+
+```bash
+# Get cache statistics
+curl -H "x-api-key: dev-key" http://localhost:8000/cache/stats
+
+# Clean up expired entries
+curl -X POST -H "x-api-key: dev-key" http://localhost:8000/cache/cleanup
+
+# Clear all cache entries
+curl -X DELETE -H "x-api-key: dev-key" http://localhost:8000/cache/clear
+```
+
+#### Pretty Logging
+
+The caching system provides rich console output for cache operations:
+
+```
+╭───────────────── 📦 JSON: Cache Hit Result ─────────────────╮
+│ {                                                           │
+│   "cache_hit": true,                                        │
+│   "handler_name": "CachedWeatherHandler",                   │
+│   "similarity": 0.95,                                       │
+│   "match_type": "semantic",                                 │
+│   "key": "weather:dubai:what is the weat..."                │
+│ }                                                           │
+╰─────────────────────────────────────────────────────────────╯
+```
+
+#### Multi-Request Handling
+
+The caching system properly handles multi-request transcripts by caching each individual request component separately:
+
+```python
+# This multi-request will cache each component individually
+result = app.invoke(
+    "turn off the kitchen AC and tell me the weather in Dubai",
+    context={"user_id": "user1", "unit_id": "unit1"}
+)
+
+# Each component (device control, weather) is cached separately
+# Subsequent similar requests will hit the cache for individual components
+```
+
+#### Creating Cached Handlers
+
+To create a cached version of your handler:
+
+```python
+from strukt.memory import CacheAwareHandler
+from strukt.types import InvocationState, HandlerResult
+
+class CachedMyHandler(CacheAwareHandler, MyHandler):
+    """My handler with intent caching support."""
+    
+    def __init__(self, *args, intent_cache_engine=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.intent_cache_engine = intent_cache_engine
+        self._cache_config = None
+        self._cache_data_type = MyCacheData
+    
+    def get_cache_config(self) -> Optional[HandlerCacheConfig]:
+        return self._cache_config
+    
+    def should_cache(self, state: InvocationState) -> bool:
+        return True  # Cache all requests
+    
+    def build_cache_key(self, state: InvocationState) -> str:
+        return f"my_handler:{state.text}:{state.context.get('user_id', '')}"
+    
+    def extract_cache_data(self, result: HandlerResult) -> Dict[str, Any]:
+        return {"response": result.response, "status": result.status}
+    
+    def apply_cached_data(self, cached_data: Dict[str, Any]) -> HandlerResult:
+        return HandlerResult(
+            response=cached_data["response"],
+            status=cached_data["status"]
+        )
+```
+
 ### Weave Logging Integration
 
 StruktX includes comprehensive Weave and OpenTelemetry integration for detailed operation tracking, performance monitoring, and debugging. The system creates a unified trace tree where all operations, including background tasks and parallel execution, are nested under a single root trace for complete visibility.

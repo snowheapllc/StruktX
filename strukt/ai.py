@@ -13,6 +13,7 @@ from .defaults import (
     SimpleLLMClient,
     UniversalLLMLogger,
 )
+from .retry import RetryConfig
 from .engine import Engine
 from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
 from .langchain_helpers import adapt_to_llm_client
@@ -173,6 +174,11 @@ class Strukt:
 
 
 def _build_llm(cfg: StruktConfig) -> LLMClient:
+    # Create retry config if specified
+    retry_config = None
+    if cfg.llm.retry:
+        retry_config = RetryConfig(**cfg.llm.retry)
+    
     factory = coerce_factory(cfg.llm.factory)
     if factory is None:
         # Try a sensible default: if OpenAI key is present, attempt ChatOpenAI
@@ -183,19 +189,19 @@ def _build_llm(cfg: StruktConfig) -> LLMClient:
 
                 candidate = ChatOpenAI(api_key=api_key)
                 adapted = adapt_to_llm_client(candidate)
-                return UniversalLLMLogger(adapted)
+                return UniversalLLMLogger(adapted, retry_config)
             except Exception:
                 pass
-        return UniversalLLMLogger(SimpleLLMClient())  # minimal default with logging
+        return UniversalLLMLogger(SimpleLLMClient(), retry_config)  # minimal default with logging
     candidate = factory(**cfg.llm.params)  # type: ignore[call-arg]
     # Auto-adapt common LangChain runnables to our LLMClient protocol
     try:
         adapted = adapt_to_llm_client(candidate)
         # Wrap with universal LLM logger for comprehensive logging
-        return UniversalLLMLogger(adapted)
+        return UniversalLLMLogger(adapted, retry_config)
     except Exception:
         # Wrap even the fallback candidate
-        return UniversalLLMLogger(candidate)  # type: ignore[arg-type]
+        return UniversalLLMLogger(candidate, retry_config)  # type: ignore[arg-type]
 
 
 def _build_classifier(cfg: StruktConfig, llm: LLMClient) -> Classifier:

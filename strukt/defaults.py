@@ -12,6 +12,7 @@ from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
 from .prompts import render_prompt_with_safe_braces
 from .types import HandlerResult, InvocationState, QueryClassification, StruktQueryEnum
 from .logging import get_logger
+from .retry import RetryConfig, retry_llm_call, async_retry_llm_call
 
 
 class DateTimeEncoder(_json.JSONEncoder):
@@ -32,10 +33,11 @@ class UniversalLLMLogger(LLMClient):
     Works with any underlying LLM client implementation.
     """
 
-    def __init__(self, base: LLMClient) -> None:
+    def __init__(self, base: LLMClient, retry_config: Optional[RetryConfig] = None) -> None:
         self._base = base
         self._logger = get_logger("universal-llm-logger")
         self._weave_available = self._logger.is_weave_available()
+        self._retry_config = retry_config
 
     def _create_contextual_operation_name(
         self, base_name: str, context: dict | None
@@ -146,7 +148,7 @@ class UniversalLLMLogger(LLMClient):
             self._logger.warn(f"Failed to log LLM operation {operation}: {e}")
 
     def invoke(self, prompt: str, **kwargs: Any) -> Any:
-        """Intercept and log invoke calls."""
+        """Intercept and log invoke calls with optional retry."""
         # Extract context from kwargs
         context = (
             kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
@@ -158,8 +160,14 @@ class UniversalLLMLogger(LLMClient):
             "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
 
-        # Execute the actual LLM call
-        result = self._base.invoke(prompt, **kwargs)
+        # Execute the actual LLM call with retry if configured
+        if self._retry_config:
+            @retry_llm_call(self._retry_config, "invoke")
+            def _invoke_with_retry():
+                return self._base.invoke(prompt, **kwargs)
+            result = _invoke_with_retry()
+        else:
+            result = self._base.invoke(prompt, **kwargs)
 
         # Log the call
         self._log_llm_call("invoke", inputs, result, context)
@@ -169,7 +177,7 @@ class UniversalLLMLogger(LLMClient):
     def structured(
         self, prompt: str, output_model: Type[BaseModel], **kwargs: Any
     ) -> Any:
-        """Intercept and log structured calls."""
+        """Intercept and log structured calls with optional retry."""
         # Extract context from kwargs
         context = (
             kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
@@ -195,8 +203,14 @@ class UniversalLLMLogger(LLMClient):
             "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
 
-        # Execute the actual LLM call
-        result = self._base.structured(prompt, output_model, **kwargs)
+        # Execute the actual LLM call with retry if configured
+        if self._retry_config:
+            @retry_llm_call(self._retry_config, "structured")
+            def _structured_with_retry():
+                return self._base.structured(prompt, output_model, **kwargs)
+            result = _structured_with_retry()
+        else:
+            result = self._base.structured(prompt, output_model, **kwargs)
 
         # Log the call
         self._log_llm_call("structured", inputs, result, context)
@@ -204,7 +218,7 @@ class UniversalLLMLogger(LLMClient):
         return result
 
     async def ainvoke(self, prompt: str, **kwargs: Any) -> Any:
-        """Intercept and log async invoke calls."""
+        """Intercept and log async invoke calls with optional retry."""
         # Extract context from kwargs
         context = (
             kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
@@ -216,8 +230,14 @@ class UniversalLLMLogger(LLMClient):
             "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
 
-        # Execute the actual LLM call
-        result = await self._base.ainvoke(prompt, **kwargs)
+        # Execute the actual LLM call with retry if configured
+        if self._retry_config:
+            @async_retry_llm_call(self._retry_config, "ainvoke")
+            async def _ainvoke_with_retry():
+                return await self._base.ainvoke(prompt, **kwargs)
+            result = await _ainvoke_with_retry()
+        else:
+            result = await self._base.ainvoke(prompt, **kwargs)
 
         # Log the call
         self._log_llm_call("ainvoke", inputs, result, context)
@@ -227,7 +247,7 @@ class UniversalLLMLogger(LLMClient):
     async def astructured(
         self, prompt: str, output_model: Type[BaseModel], **kwargs: Any
     ) -> Any:
-        """Intercept and log async structured calls."""
+        """Intercept and log async structured calls with optional retry."""
         # Extract context from kwargs
         context = (
             kwargs.get("context") if isinstance(kwargs.get("context"), dict) else {}
@@ -253,8 +273,14 @@ class UniversalLLMLogger(LLMClient):
             "kwargs": {k: v for k, v in kwargs.items() if k != "context"},
         }
 
-        # Execute the actual LLM call
-        result = await self._base.astructured(prompt, output_model, **kwargs)
+        # Execute the actual LLM call with retry if configured
+        if self._retry_config:
+            @async_retry_llm_call(self._retry_config, "astructured")
+            async def _astructured_with_retry():
+                return await self._base.astructured(prompt, output_model, **kwargs)
+            result = await _astructured_with_retry()
+        else:
+            result = await self._base.astructured(prompt, output_model, **kwargs)
 
         # Log the call
         self._log_llm_call("astructured", inputs, result, context)

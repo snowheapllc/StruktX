@@ -804,6 +804,270 @@ log.info("Hello logs")
         <p>Augmented memory injections appear under the <code>memory</code> logger with the provided <code>augment_source</code> label.</p>
       </section>
 
+      <section id="llm-retry" className="section">
+        <h3 className="text-xl font-semibold">LLM Retry Mechanism</h3>
+        <p>StruktX includes built-in retry functionality for LLM calls to handle transient failures and improve reliability. The retry mechanism supports both synchronous and asynchronous LLM operations with configurable backoff strategies.</p>
+        
+        <h4 className="text-lg font-semibold mt-6">Configuration</h4>
+        <p>Enable retry functionality in your LLM client configuration:</p>
+        <CodeBlock className="code-block" language="python" filename="llm_retry_config.py" showExample={true} code={`from strukt import StruktConfig, LLMClientConfig
+
+config = StruktConfig(
+    llm=LLMClientConfig(
+        factory="langchain_openai:ChatOpenAI",
+        params=dict(
+            model="gpt-4o-mini",
+            api_key="your-api-key",
+            base_url="https://api.openai.com/v1"
+        ),
+        retry={
+            "max_retries": 3,
+            "base_delay": 1.0,
+            "max_delay": 30.0,
+            "exponential_base": 2.0,
+            "jitter": True,
+            "retryable_exceptions": (Exception,),  # Retry on any exception
+        }
+    )
+)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Retry Parameters</h4>
+        <ul className="list-disc pl-6">
+          <li><strong>max_retries</strong>: Maximum number of retry attempts (default: 3)</li>
+          <li><strong>base_delay</strong>: Initial delay between retries in seconds (default: 1.0)</li>
+          <li><strong>max_delay</strong>: Maximum delay between retries in seconds (default: 30.0)</li>
+          <li><strong>exponential_base</strong>: Base for exponential backoff (default: 2.0)</li>
+          <li><strong>jitter</strong>: Add random jitter to prevent thundering herd (default: True)</li>
+          <li><strong>retryable_exceptions</strong>: Tuple of exception types to retry on (default: (Exception,))</li>
+        </ul>
+
+        <h4 className="text-lg font-semibold mt-6">Supported Operations</h4>
+        <p>The retry mechanism automatically applies to all LLM operations:</p>
+        <ul className="list-disc pl-6">
+          <li><code>invoke()</code> - Text generation</li>
+          <li><code>structured()</code> - Structured output generation</li>
+          <li><code>ainvoke()</code> - Async text generation</li>
+          <li><code>astructured()</code> - Async structured output generation</li>
+        </ul>
+
+        <h4 className="text-lg font-semibold mt-6">Example Usage</h4>
+        <CodeBlock className="code-block" language="python" filename="llm_retry_example.py" showExample={true} code={`from strukt import create, StruktConfig, LLMClientConfig
+
+# Configure with retry
+config = StruktConfig(
+    llm=LLMClientConfig(
+        factory="langchain_openai:ChatOpenAI",
+        params=dict(model="gpt-4o-mini"),
+        retry={
+            "max_retries": 2,
+            "base_delay": 0.5,
+            "max_delay": 10.0,
+            "jitter": True
+        }
+    )
+)
+
+app = create(config)
+
+# All LLM calls will automatically retry on failure
+result = app.invoke("Hello, world!")
+`} />
+      </section>
+
+      <section id="intent-caching" className="section">
+        <h3 className="text-xl font-semibold">Intent Caching</h3>
+        <p>StruktX provides intelligent caching for handler results based on semantic similarity of user queries. This reduces redundant processing and improves response times for similar requests.</p>
+        
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">Semantic Matching</span>
+            <span>Cache entries are matched based on meaning, not exact text</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Fast Track Caching</span>
+            <span>Immediate in-memory caching for exact matches</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Configurable TTL</span>
+            <span>Time-to-live settings per handler type</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Scoped Caching</span>
+            <span>Cache entries can be scoped by user, unit, or globally</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Pretty Logging</span>
+            <span>Rich console output for cache hits, misses, and stores</span>
+          </div>
+        </div>
+
+        <h4 className="text-lg font-semibold mt-6">Configuration</h4>
+        <p>Enable intent caching in your StruktX configuration:</p>
+        <CodeBlock className="code-block" language="python" filename="intent_cache_config.py" showExample={true} code={`from strukt import StruktConfig, HandlersConfig
+from strukt.memory import InMemoryIntentCacheEngine, IntentCacheConfig, HandlerCacheConfig, CacheStrategy, CacheScope
+
+# Create intent cache configuration
+intent_cache_config = IntentCacheConfig(
+    enabled=True,
+    default_strategy=CacheStrategy.SEMANTIC,
+    default_ttl_seconds=3600,
+    similarity_threshold=0.7,
+    max_entries_per_handler=1000,
+    handler_configs={
+        "WeatherHandler": HandlerCacheConfig(
+            handler_name="WeatherHandler",
+            strategy=CacheStrategy.SEMANTIC,
+            scope=CacheScope.USER,
+            ttl_seconds=1800,
+            max_entries=500,
+            similarity_threshold=0.6,
+            enable_fast_track=True
+        ),
+        "DeviceHandler": HandlerCacheConfig(
+            handler_name="DeviceHandler",
+            strategy=CacheStrategy.SEMANTIC,
+            scope=CacheScope.USER,
+            ttl_seconds=1800,
+            max_entries=500,
+            similarity_threshold=0.8,
+            enable_fast_track=True
+        )
+    }
+)
+
+# Create cache engine
+intent_cache_engine = InMemoryIntentCacheEngine(intent_cache_config)
+
+# Configure handlers with caching
+config = StruktConfig(
+    handlers=HandlersConfig(
+        registry={
+            "weather_service": CachedWeatherHandler,
+            "device_control": CachedDeviceHandler,
+        },
+        handler_params={
+            "weather_service": dict(intent_cache_engine=intent_cache_engine),
+            "device_control": dict(intent_cache_engine=intent_cache_engine),
+        }
+    )
+)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Cache Strategies</h4>
+        <ul className="list-disc pl-6">
+          <li><strong>EXACT</strong>: Match exact text queries</li>
+          <li><strong>SEMANTIC</strong>: Match based on semantic similarity</li>
+          <li><strong>FUZZY</strong>: Match with fuzzy string matching</li>
+          <li><strong>HYBRID</strong>: Combine multiple strategies</li>
+        </ul>
+
+        <h4 className="text-lg font-semibold mt-6">Cache Scopes</h4>
+        <ul className="list-disc pl-6">
+          <li><strong>GLOBAL</strong>: Cache entries visible to all users</li>
+          <li><strong>USER</strong>: Cache entries scoped to specific users</li>
+          <li><strong>UNIT</strong>: Cache entries scoped to specific units</li>
+          <li><strong>SESSION</strong>: Cache entries scoped to specific sessions</li>
+        </ul>
+
+        <h4 className="text-lg font-semibold mt-6">Cache Management</h4>
+        <CodeBlock className="code-block" language="python" filename="cache_management.py" showExample={true} code={`# Get cache statistics
+stats = intent_cache_engine.get_stats()
+print(f"Hit rate: {stats.hit_rate:.2%}")
+
+# Clean up expired entries
+cleanup_stats = intent_cache_engine.cleanup()
+print(f"Removed {cleanup_stats.expired_entries} expired entries")
+
+# Clear all cache entries
+intent_cache_engine.clear()
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Cache Management API Endpoints</h4>
+        <p>When using StruktX with FastAPI, you can expose cache management endpoints:</p>
+        <CodeBlock className="code-block" language="python" filename="cache_api_endpoints.py" showExample={true} code={`from fastapi import FastAPI
+from strukt import build_fastapi_app
+
+app = FastAPI()
+strukt_app = create(config)
+build_fastapi_app(strukt_app, config, app=app)
+
+# Cache management endpoints are automatically available:
+# GET /cache/stats - Get cache statistics
+# POST /cache/cleanup - Clean up expired entries
+# DELETE /cache/clear - Clear all cache entries
+`} />
+
+        <p>Example usage with curl:</p>
+        <CodeBlock className="code-block" language="bash" filename="cache_api_curl.sh" showExample={true} code={`# Get cache statistics
+curl -H "x-api-key: dev-key" http://localhost:8000/cache/stats
+
+# Clean up expired entries
+curl -X POST -H "x-api-key: dev-key" http://localhost:8000/cache/cleanup
+
+# Clear all cache entries
+curl -X DELETE -H "x-api-key: dev-key" http://localhost:8000/cache/clear
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Pretty Logging</h4>
+        <p>The caching system provides rich console output for cache operations:</p>
+        <CodeBlock className="code-block" language="text" filename="cache_logging.txt" showExample={true} code={`╭───────────────── 📦 JSON: Cache Hit Result ─────────────────╮
+│ {                                                           │
+│   "cache_hit": true,                                        │
+│   "handler_name": "CachedWeatherHandler",                   │
+│   "similarity": 0.95,                                       │
+│   "match_type": "semantic",                                 │
+│   "key": "weather:dubai:what is the weat..."                │
+│ }                                                           │
+╰─────────────────────────────────────────────────────────────╯
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Multi-Request Handling</h4>
+        <p>The caching system properly handles multi-request transcripts by caching each individual request component separately:</p>
+        <CodeBlock className="code-block" language="python" filename="multi_request_caching.py" showExample={true} code={`# This multi-request will cache each component individually
+result = app.invoke(
+    "turn off the kitchen AC and tell me the weather in Dubai",
+    context={"user_id": "user1", "unit_id": "unit1"}
+)
+
+# Each component (device control, weather) is cached separately
+# Subsequent similar requests will hit the cache for individual components
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Creating Cached Handlers</h4>
+        <p>To create a cached version of your handler:</p>
+        <CodeBlock className="code-block" language="python" filename="cached_handler_example.py" showExample={true} code={`from strukt.memory import CacheAwareHandler
+from strukt.types import InvocationState, HandlerResult
+
+class CachedMyHandler(CacheAwareHandler, MyHandler):
+    """My handler with intent caching support."""
+    
+    def __init__(self, *args, intent_cache_engine=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.intent_cache_engine = intent_cache_engine
+        self._cache_config = None
+        self._cache_data_type = MyCacheData
+    
+    def get_cache_config(self) -> Optional[HandlerCacheConfig]:
+        return self._cache_config
+    
+    def should_cache(self, state: InvocationState) -> bool:
+        return True  # Cache all requests
+    
+    def build_cache_key(self, state: InvocationState) -> str:
+        return f"my_handler:{state.text}:{state.context.get('user_id', '')}"
+    
+    def extract_cache_data(self, result: HandlerResult) -> Dict[str, Any]:
+        return {"response": result.response, "status": result.status}
+    
+    def apply_cached_data(self, cached_data: Dict[str, Any]) -> HandlerResult:
+        return HandlerResult(
+            response=cached_data["response"],
+            status=cached_data["status"]
+        )
+`} />
+      </section>
+
       <section id="weave-logging" className="section">
         <h3 className="text-xl font-semibold">Weave Logging Integration</h3>
         <p>StruktX includes comprehensive Weave and OpenTelemetry integration for detailed operation tracking, performance monitoring, and debugging. The system creates a unified trace tree where all operations, including background tasks and parallel execution, are nested under a single root trace for complete visibility.</p>

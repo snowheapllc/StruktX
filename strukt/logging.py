@@ -4,7 +4,7 @@ from datetime import datetime
 import json
 import os
 import contextlib
-from typing import Any, Optional, Callable, TypeVar, cast
+from typing import Any, Dict, Optional, Callable, TypeVar, cast
 
 from rich.console import Console
 from rich.json import JSON as RichJSON
@@ -330,6 +330,102 @@ class StruktLogger:
         self._console.print(panel)
 
     def json(self, title: str, data: Any) -> None:
+        try:
+            rendered = RichJSON.from_data(data)
+            panel = Panel(rendered, title=f"📦 JSON: {title}", border_style="cyan")
+            self._console.print(panel)
+        except Exception:
+            # Fallback to plain dump
+            text = json.dumps(data, indent=2, ensure_ascii=False)
+            panel = Panel(
+                self._maybe_truncate(text),
+                title=f"📦 JSON (raw): {title}",
+                border_style="cyan",
+            )
+            self._console.print(panel)
+
+    def cache_hit(self, handler_name: str, cache_key: str, similarity: float, match_type: str) -> None:
+        """Log cache hit with pretty formatting."""
+        if not self._should("info"):
+            return
+        message = f"cache_hit=true similarity={similarity:.3f} match_type={match_type} key={cache_key[:30]}{'...' if len(cache_key) > 30 else ''}"
+        panel = Panel(
+            self._maybe_truncate(message),
+            title=f"🎯 [bold green]{self._name}[/bold green] CACHE HIT",
+            border_style="green",
+        )
+        self._console.print(panel)
+
+    def cache_miss(self, handler_name: str, cache_key: str, reason: str = "No match found") -> None:
+        """Log cache miss with pretty formatting."""
+        if not self._should("info"):
+            return
+        message = f"cache_hit=false reason={reason} key={cache_key[:30]}{'...' if len(cache_key) > 30 else ''}"
+        panel = Panel(
+            self._maybe_truncate(message),
+            title=f"❌ [bold yellow]{self._name}[/bold yellow] CACHE MISS",
+            border_style="yellow",
+        )
+        self._console.print(panel)
+
+    def cache_store(self, handler_name: str, cache_key: str, ttl_seconds: int) -> None:
+        """Log cache store with pretty formatting."""
+        if not self._should("info"):
+            return
+        message = f"cache_store=true ttl_seconds={ttl_seconds} key={cache_key[:30]}{'...' if len(cache_key) > 30 else ''}"
+        panel = Panel(
+            self._maybe_truncate(message),
+            title=f"💾 [bold blue]{self._name}[/bold blue] CACHE STORE",
+            border_style="blue",
+        )
+        self._console.print(panel)
+
+    def cache_fast_track_hit(self, handler_name: str, cache_key: str) -> None:
+        """Log fast track cache hit with pretty formatting."""
+        if not self._should("info"):
+            return
+        message = f"fast_track_hit=true key={cache_key[:30]}{'...' if len(cache_key) > 30 else ''}"
+        panel = Panel(
+            self._maybe_truncate(message),
+            title=f"⚡ [bold cyan]{self._name}[/bold cyan] FAST TRACK HIT",
+            border_style="cyan",
+        )
+        self._console.print(panel)
+
+    def cache_fast_track_store(self, handler_name: str, cache_key: str) -> None:
+        """Log fast track cache store with pretty formatting."""
+        if not self._should("info"):
+            return
+        message = f"fast_track_store=true key={cache_key[:30]}{'...' if len(cache_key) > 30 else ''}"
+        panel = Panel(
+            self._maybe_truncate(message),
+            title=f"⚡ [bold cyan]{self._name}[/bold cyan] FAST TRACK STORE",
+            border_style="cyan",
+        )
+        self._console.print(panel)
+
+    def cache_stats(self, stats: Dict[str, Any]) -> None:
+        """Log cache statistics with pretty formatting."""
+        if not self._should("info"):
+            return
+        message = f"Cache Statistics:\n"
+        message += f"Total Entries: {stats.get('total_entries', 0)}\n"
+        message += f"Hits: {stats.get('hits', 0)}\n"
+        message += f"Misses: {stats.get('misses', 0)}\n"
+        message += f"Hit Rate: {stats.get('hit_rate', 0.0):.2%}\n"
+        message += f"Average Similarity: {stats.get('average_similarity', 0.0):.3f}\n"
+        message += f"Evictions: {stats.get('evictions', 0)}\n"
+        message += f"Expired: {stats.get('expired_entries', 0)}"
+        
+        panel = Panel(
+            self._maybe_truncate(message),
+            title=f"📊 [bold magenta]{self._name}[/bold magenta] CACHE STATS",
+            border_style="magenta",
+        )
+        self._console.print(panel)
+
+    def cache_result(self, title: str, data: Dict[str, Any]) -> None:
+        """Log cache result as JSON with pretty formatting (like the image shows)."""
         try:
             rendered = RichJSON.from_data(data)
             panel = Panel(rendered, title=f"📦 JSON: {title}", border_style="cyan")

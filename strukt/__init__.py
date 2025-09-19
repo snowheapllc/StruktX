@@ -16,6 +16,7 @@ from .interfaces import Classifier, Handler, LLMClient, MemoryEngine
 from .secrets import AWSSecretsManager
 from .langchain_helpers import LangChainLLMClient
 from .logging import get_logger
+from .retry import RetryConfig, RetryableLLMClient
 from .types import (
     HandlerResult,
     InvocationState,
@@ -52,4 +53,6 @@ __all__ = [
     "AWSSecretsManager",
     "build_fastapi_app",
     "WeaveConfig",
+    "RetryConfig",
+    "RetryableLLMClient",
 ]
