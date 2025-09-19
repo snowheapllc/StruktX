@@ -344,7 +344,9 @@ class StruktLogger:
             )
             self._console.print(panel)
 
-    def cache_hit(self, handler_name: str, cache_key: str, similarity: float, match_type: str) -> None:
+    def cache_hit(
+        self, handler_name: str, cache_key: str, similarity: float, match_type: str
+    ) -> None:
         """Log cache hit with pretty formatting."""
         if not self._should("info"):
             return
@@ -356,7 +358,9 @@ class StruktLogger:
         )
         self._console.print(panel)
 
-    def cache_miss(self, handler_name: str, cache_key: str, reason: str = "No match found") -> None:
+    def cache_miss(
+        self, handler_name: str, cache_key: str, reason: str = "No match found"
+    ) -> None:
         """Log cache miss with pretty formatting."""
         if not self._should("info"):
             return
@@ -408,7 +412,7 @@ class StruktLogger:
         """Log cache statistics with pretty formatting."""
         if not self._should("info"):
             return
-        message = f"Cache Statistics:\n"
+        message = "Cache Statistics:\n"
         message += f"Total Entries: {stats.get('total_entries', 0)}\n"
         message += f"Hits: {stats.get('hits', 0)}\n"
         message += f"Misses: {stats.get('misses', 0)}\n"
@@ -416,7 +420,7 @@ class StruktLogger:
         message += f"Average Similarity: {stats.get('average_similarity', 0.0):.3f}\n"
         message += f"Evictions: {stats.get('evictions', 0)}\n"
         message += f"Expired: {stats.get('expired_entries', 0)}"
-        
+
         panel = Panel(
             self._maybe_truncate(message),
             title=f"📊 [bold magenta]{self._name}[/bold magenta] CACHE STATS",

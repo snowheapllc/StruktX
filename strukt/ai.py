@@ -178,7 +178,7 @@ def _build_llm(cfg: StruktConfig) -> LLMClient:
     retry_config = None
     if cfg.llm.retry:
         retry_config = RetryConfig(**cfg.llm.retry)
-    
+
     factory = coerce_factory(cfg.llm.factory)
     if factory is None:
         # Try a sensible default: if OpenAI key is present, attempt ChatOpenAI
@@ -192,7 +192,9 @@ def _build_llm(cfg: StruktConfig) -> LLMClient:
                 return UniversalLLMLogger(adapted, retry_config)
             except Exception:
                 pass
-        return UniversalLLMLogger(SimpleLLMClient(), retry_config)  # minimal default with logging
+        return UniversalLLMLogger(
+            SimpleLLMClient(), retry_config
+        )  # minimal default with logging
     candidate = factory(**cfg.llm.params)  # type: ignore[call-arg]
     # Auto-adapt common LangChain runnables to our LLMClient protocol
     try:

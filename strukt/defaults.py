@@ -33,7 +33,9 @@ class UniversalLLMLogger(LLMClient):
     Works with any underlying LLM client implementation.
     """
 
-    def __init__(self, base: LLMClient, retry_config: Optional[RetryConfig] = None) -> None:
+    def __init__(
+        self, base: LLMClient, retry_config: Optional[RetryConfig] = None
+    ) -> None:
         self._base = base
         self._logger = get_logger("universal-llm-logger")
         self._weave_available = self._logger.is_weave_available()
@@ -162,9 +164,11 @@ class UniversalLLMLogger(LLMClient):
 
         # Execute the actual LLM call with retry if configured
         if self._retry_config:
+
             @retry_llm_call(self._retry_config, "invoke")
             def _invoke_with_retry():
                 return self._base.invoke(prompt, **kwargs)
+
             result = _invoke_with_retry()
         else:
             result = self._base.invoke(prompt, **kwargs)
@@ -205,9 +209,11 @@ class UniversalLLMLogger(LLMClient):
 
         # Execute the actual LLM call with retry if configured
         if self._retry_config:
+
             @retry_llm_call(self._retry_config, "structured")
             def _structured_with_retry():
                 return self._base.structured(prompt, output_model, **kwargs)
+
             result = _structured_with_retry()
         else:
             result = self._base.structured(prompt, output_model, **kwargs)
@@ -232,9 +238,11 @@ class UniversalLLMLogger(LLMClient):
 
         # Execute the actual LLM call with retry if configured
         if self._retry_config:
+
             @async_retry_llm_call(self._retry_config, "ainvoke")
             async def _ainvoke_with_retry():
                 return await self._base.ainvoke(prompt, **kwargs)
+
             result = await _ainvoke_with_retry()
         else:
             result = await self._base.ainvoke(prompt, **kwargs)
@@ -275,9 +283,11 @@ class UniversalLLMLogger(LLMClient):
 
         # Execute the actual LLM call with retry if configured
         if self._retry_config:
+
             @async_retry_llm_call(self._retry_config, "astructured")
             async def _astructured_with_retry():
                 return await self._base.astructured(prompt, output_model, **kwargs)
+
             result = await _astructured_with_retry()
         else:
             result = await self._base.astructured(prompt, output_model, **kwargs)
