@@ -78,31 +78,30 @@ class Engine:
             self._apply_tracing()
         else:
             self._logger.info("Engine initialized without Weave logging")
-    
+
     def _apply_tracing(self):
         """Apply @weave.op decorators to key methods for waterfall tracing."""
         try:
             # Apply tracing to internal async methods
             self._aclassify = strukt_trace(
-                name="StruktX.Engine.classify",
-                call_display_name="Classify Query"
+                name="StruktX.Engine.classify", call_display_name="Classify Query"
             )(self._aclassify)
-            
+
             self._aexecute_grouped_handlers = strukt_trace(
                 name="StruktX.Engine.execute_handlers",
-                call_display_name="Execute Handlers"
+                call_display_name="Execute Handlers",
             )(self._aexecute_grouped_handlers)
-            
+
             self._aexecute_handlers_parallel = strukt_trace(
                 name="StruktX.Engine.handlers_parallel",
-                call_display_name="Execute Handlers (Parallel)"
+                call_display_name="Execute Handlers (Parallel)",
             )(self._aexecute_handlers_parallel)
-            
+
             self._aexecute_single_handler = strukt_trace(
                 name="StruktX.Engine.single_handler",
-                call_display_name="Execute Handler"
+                call_display_name="Execute Handler",
             )(self._aexecute_single_handler)
-            
+
         except Exception as e:
             self._logger.debug(f"Failed to apply tracing: {e}")
 
@@ -297,7 +296,7 @@ class Engine:
         prefix = None
         if self._tracing_config is not None:
             prefix = getattr(self._tracing_config, "trace_name_prefix", None)
-        
+
         # Generate custom trace name using [prefix-]userID-unitID-UUID-timestamp format
         custom_trace_name = generate_trace_name(user_context, prefix=prefix)
 
@@ -311,7 +310,10 @@ class Engine:
         # Use unified trace context to ensure everything is nested
         # Mark as root trace to wait for all background tasks
         with unified_trace_context(
-            thread_id, f"{label}.run({display_context})", custom_trace_name, is_root=True
+            thread_id,
+            f"{label}.run({display_context})",
+            custom_trace_name,
+            is_root=True,
         ):
             start_time = time.time()
             run_id = str(uuid.uuid4())
@@ -357,7 +359,7 @@ class Engine:
         prefix = None
         if self._tracing_config is not None:
             prefix = getattr(self._tracing_config, "trace_name_prefix", None)
-        
+
         # Generate custom trace name using [prefix-]userID-unitID-UUID-timestamp format
         custom_trace_name = generate_trace_name(user_context, prefix=prefix)
 
@@ -371,7 +373,7 @@ class Engine:
         # Create a dynamic @weave.op with the custom trace name
         try:
             import weave
-            
+
             @weave.op(name="StruktX.Request", call_display_name=custom_trace_name)
             async def _traced_request():
                 """Root operation with custom trace name."""
@@ -385,14 +387,20 @@ class Engine:
                 )
 
                 # Add initial trace attributes
-                add_trace_attributes({
-                    "engine.run_id": run_id,
-                    "engine.input_text": state.text,
-                    "engine.user_id": extracted_context.get("user_id") if extracted_context else None,
-                    "engine.unit_id": extracted_context.get("unit_id") if extracted_context else None,
-                    "engine.thread_name": custom_trace_name,
-                    "engine.async": True,
-                })
+                add_trace_attributes(
+                    {
+                        "engine.run_id": run_id,
+                        "engine.input_text": state.text,
+                        "engine.user_id": extracted_context.get("user_id")
+                        if extracted_context
+                        else None,
+                        "engine.unit_id": extracted_context.get("unit_id")
+                        if extracted_context
+                        else None,
+                        "engine.thread_name": custom_trace_name,
+                        "engine.async": True,
+                    }
+                )
 
                 results = await self._arun_with_context(
                     state, start_time, run_id, extracted_context
@@ -414,17 +422,23 @@ class Engine:
                     pass
 
                 return results
-            
+
             # Execute within unified trace context (weave.thread)
             with unified_trace_context(
-                thread_id, f"{label}.arun({display_context})", custom_trace_name, is_root=True
+                thread_id,
+                f"{label}.arun({display_context})",
+                custom_trace_name,
+                is_root=True,
             ):
                 return await _traced_request()
-                
+
         except ImportError:
             # Weave not available, run without tracing
             with unified_trace_context(
-                thread_id, f"{label}.arun({display_context})", custom_trace_name, is_root=True
+                thread_id,
+                f"{label}.arun({display_context})",
+                custom_trace_name,
+                is_root=True,
             ):
                 start_time = time.time()
                 run_id = str(uuid.uuid4())
@@ -476,12 +490,14 @@ class Engine:
         try:
             # Execute classification (async)
             state, classification = await self._aclassify(state, user_context)
-            
+
             # Add classification attributes to trace
-            add_trace_attributes({
-                "classification.query_types": classification.query_types,
-                "classification.parts_count": len(classification.parts),
-            })
+            add_trace_attributes(
+                {
+                    "classification.query_types": classification.query_types,
+                    "classification.parts_count": len(classification.parts),
+                }
+            )
 
             # Check for fallback
             fallback = self._maybe_fallback_handler()
@@ -962,21 +978,21 @@ class Engine:
                 """Inner function to properly handle async execution with tracing."""
                 # Get handler name for display
                 handler_name = handler.__class__.__name__
-                
+
                 # Wrap handler execution with a weave.op for visibility
                 try:
                     import weave
-                    
+
                     @weave.op(
                         name=f"Handler.{query_type}",
-                        call_display_name=f"{handler_name}"
+                        call_display_name=f"{handler_name}",
                     )
                     async def _traced_handler():
                         result = handler.ahandle(state, parts)
                         if asyncio.iscoroutine(result):
                             return await result
                         return result
-                    
+
                     return await _traced_handler()
                 except ImportError:
                     # Weave not available, execute without tracing

@@ -22,11 +22,11 @@ _trace_locks = {}  # Locks per trace to ensure completion
 
 def generate_trace_name(context: dict = None, prefix: str = None) -> str:
     """Generate a trace name in format: [prefix-]userID-unitID-UUID-timestamp
-    
+
     Args:
         context: Context dict containing user_id, unit_id, thread_id/session_id
         prefix: Optional prefix to prepend to the trace name
-        
+
     Returns:
         Formatted trace name string
     """
@@ -49,17 +49,18 @@ def generate_trace_name(context: dict = None, prefix: str = None) -> str:
     return f"{user_id}-{unit_id}-{thread_id}-{timestamp}"
 
 
-
-
 @contextmanager
 def unified_trace_context(
-    thread_id: str = None, operation_name: str = None, custom_name: str = None, is_root: bool = False
+    thread_id: str = None,
+    operation_name: str = None,
+    custom_name: str = None,
+    is_root: bool = False,
 ):
     """Context manager for unified tracing with a single Weave operation.
-    
+
     Uses weave.thread() to group all operations under a single thread ID.
     The custom_name becomes the thread_id which shows up in Weave UI.
-    
+
     Args:
         thread_id: Unique identifier for the trace session
         operation_name: Name of the current operation
@@ -97,7 +98,7 @@ def unified_trace_context(
                     finally:
                         # Wait for background tasks before thread ends
                         _wait_for_trace_completion(thread_id, timeout=10.0)
-                    
+
             finally:
                 # Cleanup
                 with contextlib.suppress(Exception):
@@ -108,7 +109,7 @@ def unified_trace_context(
         else:
             # Non-root operations just yield within the existing thread context
             yield
-                        
+
     except Exception:
         # Cleanup on error
         if is_root and thread_id in _active_traces:
@@ -118,47 +119,45 @@ def unified_trace_context(
         raise
 
 
-
-
 def _wait_for_trace_completion(thread_id: str, timeout: float = 5.0):
     """Wait for all background tasks in a trace to complete before session ends.
-    
+
     This is called within the weave.thread() context to ensure background tasks
     are captured in the trace.
-    
+
     Args:
         thread_id: The trace session ID
         timeout: Maximum time to wait in seconds
     """
     if thread_id not in _active_traces:
         return
-        
+
     start_wait = time.time()
-    
+
     # Wait for all background tasks to complete
     while time.time() - start_wait < timeout:
         if thread_id not in _trace_locks:
             break
-            
+
         with _trace_locks[thread_id]:
             trace_info = _active_traces.get(thread_id)
             if not trace_info or trace_info["pending_count"] == 0:
                 break
-                
+
         # Check periodically
         time.sleep(0.05)
 
 
 def register_background_task(thread_id: str, task_id: str):
     """Register a background task for a trace session.
-    
+
     Args:
         thread_id: The trace session ID
         task_id: Unique ID for the background task
     """
     if thread_id not in _active_traces:
         return
-        
+
     with _trace_locks[thread_id]:
         trace_info = _active_traces.get(thread_id)
         if trace_info:
@@ -168,14 +167,14 @@ def register_background_task(thread_id: str, task_id: str):
 
 def complete_background_task(thread_id: str, task_id: str):
     """Mark a background task as complete for a trace session.
-    
+
     Args:
         thread_id: The trace session ID
         task_id: Unique ID for the background task
     """
     if thread_id not in _active_traces:
         return
-        
+
     with _trace_locks[thread_id]:
         trace_info = _active_traces.get(thread_id)
         if trace_info and task_id in trace_info["background_tasks"]:
@@ -184,18 +183,18 @@ def complete_background_task(thread_id: str, task_id: str):
 
 def add_trace_attributes(attributes: dict[str, Any]) -> None:
     """Add attributes to the current trace.
-    
+
     Uses weave.attributes() to add metadata to the current operation.
-    
+
     Args:
         attributes: Dictionary of attributes to add to the current trace
     """
     if not _trace_enabled:
         return
-    
+
     try:
         import weave
-        
+
         # Use weave.attributes context manager
         # This adds attributes to the current @weave.op in the call stack
         with weave.attributes(attributes):
@@ -206,14 +205,12 @@ def add_trace_attributes(attributes: dict[str, Any]) -> None:
         pass
 
 
-def strukt_trace(
-    name: str = None, call_display_name: str = None
-):
+def strukt_trace(name: str = None, call_display_name: str = None):
     """Decorator that creates a @weave.op to trace operations.
-    
+
     This creates a proper @weave.op that will be nested under the weave.thread()
     context established by unified_trace_context.
-    
+
     NOTE: Currently disabled by default. Use add_trace_attributes() instead
     for simpler attribute-based tracing.
     """
@@ -240,7 +237,9 @@ def strukt_trace(
 
         # Apply @weave.op decorator with custom name
         try:
-            traced_func = weave.op(name=op_name, call_display_name=call_display_name or op_name)(func)
+            traced_func = weave.op(
+                name=op_name, call_display_name=call_display_name or op_name
+            )(func)
             return cast(F, traced_func)
         except Exception:
             # If weave.op fails, return original function
@@ -337,7 +336,7 @@ def disable_global_tracing():
 # Auto-instrument all StruktX base classes
 def auto_instrument_struktx():
     """Automatically instrument all StruktX base classes and their methods.
-    
+
     NOTE: Auto-instrumentation is disabled by default to prevent creating
     multiple traces. Use add_trace_attributes() manually in critical paths.
     """
@@ -348,7 +347,7 @@ def auto_instrument_struktx():
 
 def _instrument_class_methods(cls, prefix: str):
     """Instrument all methods of a class with unified tracing.
-    
+
     NOTE: This is disabled to prevent creating multiple traces.
     """
     # Disabled - causes multiple trace creation issues

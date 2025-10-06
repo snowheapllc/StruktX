@@ -76,7 +76,9 @@ class StruktLogger:
             # We disable it to have full control over what gets traced
             weave.init(
                 project_name=f"{self._weave_project_name}-{self._weave_environment}",
-                autopatch_settings=AutopatchSettings(disable_autopatch=True),  # CRITICAL: Prevents automatic tracing of LangChain/OpenAI calls
+                autopatch_settings=AutopatchSettings(
+                    disable_autopatch=True
+                ),  # CRITICAL: Prevents automatic tracing of LangChain/OpenAI calls
             )
             # Update global state
             global \

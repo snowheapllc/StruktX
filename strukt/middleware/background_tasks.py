@@ -14,7 +14,11 @@ from datetime import datetime
 from strukt.middleware import Middleware
 from strukt.types import HandlerResult, InvocationState, BackgroundTaskInfo
 from strukt.logging import get_logger
-from strukt.tracing import strukt_trace, register_background_task, complete_background_task
+from strukt.tracing import (
+    strukt_trace,
+    register_background_task,
+    complete_background_task,
+)
 
 
 class TaskStatus(Enum):
@@ -272,7 +276,7 @@ class BackgroundTaskMiddleware(Middleware):
 
         # Register this background task with the trace system
         register_background_task(current_thread_id, task_id)
-        
+
         # Submit task to thread pool
         future = self._executor.submit(
             self._execute_background_task,
