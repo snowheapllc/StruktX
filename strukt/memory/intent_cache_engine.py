@@ -277,7 +277,9 @@ class InMemoryIntentCacheEngine(IntentCacheEngine):
         normalized_key = self._create_cache_key(cache_key)
 
         # Convert data to proper type if needed
-        if isinstance(data, dict) and not isinstance(handler_config.cache_data_type, dict):
+        if isinstance(data, dict) and not isinstance(
+            handler_config.cache_data_type, dict
+        ):
             from .intent_cache_types import DictData
 
             if handler_config.cache_data_type == DictData:

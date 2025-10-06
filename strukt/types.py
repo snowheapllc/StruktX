@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, TypedDict
 
 
 class StruktQueryEnum:
@@ -23,17 +23,17 @@ class InvocationState:
     """
 
     text: str
-    context: Dict[str, Any] = field(default_factory=lambda: {"handler_intents": {}})
-    query_types: List[str] = field(default_factory=list)
-    confidences: List[float] = field(default_factory=list)
-    parts: List[str] = field(default_factory=list)
+    context: dict[str, Any] = field(default_factory=lambda: {"handler_intents": {}})
+    query_types: list[str] = field(default_factory=list)
+    confidences: list[float] = field(default_factory=list)
+    parts: list[str] = field(default_factory=list)
 
 
 @dataclass
 class QueryClassification:
-    query_types: List[str]
-    confidences: List[float]
-    parts: List[str]
+    query_types: list[str]
+    confidences: list[float]
+    parts: list[str]
 
 
 @dataclass
@@ -44,17 +44,17 @@ class HandlerResult:
 
 @dataclass
 class StruktResponse:
-    response: Union[str, Dict[str, Any]]
+    response: str | dict[str, Any]
     query_type: str
-    query_types: List[str]
-    parts: List[str]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    query_types: list[str]
+    parts: list[str]
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BackgroundTaskResult(TypedDict):
     """Result of a background task."""
 
-    response: Union[str, Dict[str, Any]]
+    response: str | dict[str, Any]
     status: str
 
 
@@ -67,8 +67,8 @@ class BackgroundTaskInfo(TypedDict):
     status: str
     progress: float
     created_at: str
-    started_at: Optional[str]
-    completed_at: Optional[str]
-    result: Optional[BackgroundTaskResult]
-    error: Optional[str]
-    metadata: Dict[str, Any]
+    started_at: str | None
+    completed_at: str | None
+    result: BackgroundTaskResult | None
+    error: str | None
+    metadata: dict[str, Any]

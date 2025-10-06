@@ -139,6 +139,25 @@ class EvaluationConfig:
 
 
 @dataclass
+class EngineOptimizationsConfig:
+    """Configuration for engine performance optimizations."""
+
+    # Enable performance monitoring
+    enable_performance_monitoring: bool = True
+
+    # Maximum concurrent handlers (rate limiting)
+    max_concurrent_handlers: int = 10
+
+    # LLM Client optimizations
+    enable_llm_streaming: bool = False
+    enable_llm_batching: bool = True
+    enable_llm_caching: bool = True
+    llm_batch_size: int = 16
+    llm_cache_size: int = 1000
+    llm_cache_ttl: int = 3600  # seconds
+
+
+@dataclass
 class MiddlewareConfig:
     factory: Factory | None = None
     params: Dict[str, Any] = field(default_factory=dict)
@@ -156,6 +175,9 @@ class StruktConfig:
     opentelemetry: OpenTelemetryConfig = field(default_factory=OpenTelemetryConfig)
     tracing: TracingConfig = field(default_factory=TracingConfig)
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
+    optimizations: EngineOptimizationsConfig = field(
+        default_factory=EngineOptimizationsConfig
+    )
     middleware: List[MiddlewareConfig] = field(default_factory=list)
 
     @classmethod
@@ -281,6 +303,14 @@ def _coerce_evaluation_config(value: Any) -> EvaluationConfig:
     return EvaluationConfig()
 
 
+def _coerce_optimizations_config(value: Any) -> EngineOptimizationsConfig:
+    if isinstance(value, EngineOptimizationsConfig):
+        return value
+    if isinstance(value, dict):
+        return EngineOptimizationsConfig(**value)
+    return EngineOptimizationsConfig()
+
+
 def ensure_config_types(config: StruktConfig) -> StruktConfig:
     """Normalize a `StruktConfig` instance so all nested fields are dataclasses.
 
@@ -336,6 +366,9 @@ def ensure_config_types(config: StruktConfig) -> StruktConfig:
     )
     config.tracing = _coerce_tracing_config(getattr(config, "tracing", None))
     config.evaluation = _coerce_evaluation_config(getattr(config, "evaluation", None))
+    config.optimizations = _coerce_optimizations_config(
+        getattr(config, "optimizations", None)
+    )
     # Normalize middleware list
     config.middleware = _coerce_middleware_list(getattr(config, "middleware", []))
     return config

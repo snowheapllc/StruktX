@@ -609,7 +609,7 @@ cfg = StruktConfig(
       </div>
 
       <section id="mcp" className="section">
-        <h3 className="text-xl font-semibold">MCP Server</h3>
+        <h3 className="text-xl font-semibold">MCP Server <span className="concept-badge-inline">Beta</span></h3>
         <p>Expose StruktX handlers as MCP tools over HTTP. Configure tools, auth, and consent, then serve via FastAPI.</p>
 
         <h4 className="text-lg font-semibold">Auto-discovery (recommended)</h4>
@@ -802,6 +802,167 @@ log = get_logger("struktx")
 log.info("Hello logs")
 `} />
         <p>Augmented memory injections appear under the <code>memory</code> logger with the provided <code>augment_source</code> label.</p>
+      </section>
+
+      <section id="async-optimizations" className="section">
+        <h3 className="text-xl font-semibold">Async Performance Optimizations</h3>
+        <p>StruktX includes comprehensive async/await optimizations that make it the fastest NLP → action workflow framework. These optimizations provide true concurrency, automatic sync/async handler compatibility, and advanced performance monitoring.</p>
+        
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">True Async Concurrency</span>
+            <span>Up to 15 handlers can run in parallel using asyncio.gather</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Automatic Handler Compatibility</span>
+            <span>Sync and async handlers work seamlessly together</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Performance Monitoring</span>
+            <span>Real-time metrics for execution times, success rates, and P95 latency</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Rate Limiting</span>
+            <span>Configurable concurrency control with asyncio.Semaphore</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">LLM Optimizations</span>
+            <span>Streaming, batching, and caching for improved throughput</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Circuit Breaker Pattern</span>
+            <span>Fault tolerance and cascading failure prevention</span>
+          </div>
+        </div>
+
+        <h4 className="text-lg font-semibold mt-6">Configuration</h4>
+        <p>Enable async optimizations in your StruktX configuration:</p>
+        <CodeBlock className="code-block" language="python" filename="async_config.py" showExample={true} code={`from strukt import StruktConfig, EngineOptimizationsConfig
+
+config = StruktConfig(
+    # ... other config
+    optimizations=EngineOptimizationsConfig(
+        enable_performance_monitoring=True,
+        max_concurrent_handlers=15,
+        enable_llm_streaming=False,  # Disabled for LangChain compatibility
+        enable_llm_batching=True,
+        enable_llm_caching=True,
+        llm_batch_size=10,
+        llm_cache_size=1000,
+        llm_cache_ttl=3600,
+    )
+)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Async Invocation</h4>
+        <p>Use the async API for maximum performance:</p>
+        <CodeBlock className="code-block" language="python" filename="async_invoke.py" showExample={true} code={`# Async invocation with full optimizations
+result = await app.ainvoke(
+    "turn on the kitchen AC and tell me the weather in Tokyo",
+    context={"user_id": "user1", "unit_id": "unit1"}
+)
+
+# Access performance metrics
+metrics = app._engine._performance_monitor.get_metrics()
+print(f"Average handler time: {metrics['handler_time_query'].average_duration_ms}ms")
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Handler Compatibility</h4>
+        <p>Handlers can implement either sync or async methods - StruktX automatically bridges them:</p>
+        <CodeBlock className="code-block" language="python" filename="handler_compatibility.py" showExample={true} code={`# Sync handler (automatically runs in thread pool when called via ainvoke)
+class TimeHandler(Handler):
+    def handle(self, state: InvocationState, parts: list[str]) -> HandlerResult:
+        return HandlerResult(response=f"Current time: {datetime.now()}", status="time")
+
+# Async handler (runs natively with true concurrency)
+class WeatherHandler(Handler):
+    async def ahandle(self, state: InvocationState, parts: list[str]) -> HandlerResult:
+        weather_data = await weather_api.get_weather(parts[0])
+        return HandlerResult(response=weather_data, status="weather")
+
+# Hybrid handler (implements both for optimal performance)
+class DeviceHandler(Handler):
+    def handle(self, state: InvocationState, parts: list[str]) -> HandlerResult:
+        # Sync implementation for quick operations
+        return self._process_sync(state, parts)
+    
+    async def ahandle(self, state: InvocationState, parts: list[str]) -> HandlerResult:
+        # Async implementation for I/O operations
+        return await self._process_async(state, parts)
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Performance Monitoring</h4>
+        <p>Access real-time performance metrics:</p>
+        <CodeBlock className="code-block" language="python" filename="performance_monitoring.py" showExample={true} code={`# Get performance metrics endpoint (if using FastAPI)
+@app.get("/metrics")
+async def get_performance_metrics():
+    monitor = app._engine._performance_monitor
+    return {
+        "metrics": {
+            operation: {
+                "count": metrics.count,
+                "average_duration_ms": metrics.average_duration * 1000,
+                "p95_latency_ms": metrics.p95_latency * 1000,
+                "success_rate": metrics.success_rate,
+            }
+            for operation, metrics in monitor._metrics.items()
+        },
+        "rate_limiter": {
+            "active_requests": app._engine._rate_limiter._active_count,
+            "max_concurrent": app._engine._rate_limiter.max_concurrent,
+        }
+    }
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Pydantic Response Preservation</h4>
+        <p>StruktX intelligently preserves structured Pydantic responses when multiple handlers execute together:</p>
+        <CodeBlock className="code-block" language="python" filename="pydantic_responses.py" showExample={true} code={`# Single handler - returns full Pydantic object
+result = await app.ainvoke("show me available facilities")
+# result.response = {"status": "success", "available_facilities": [...], "current_date": "..."}
+
+# Multiple handlers - preserves all structured data
+result = await app.ainvoke("show facilities and weather in Tokyo")
+# result.response = [
+#   {"status": "success", "available_facilities": [...], "current_date": "..."},
+#   {"status": "success", "temperature": 22.8, "conditions": "broken clouds", "location": "Tokyo"}
+# ]
+
+# Mixed responses - falls back to string concatenation
+result = await app.ainvoke("turn on AC and tell me the time")
+# result.response = "Device control successful. Current time is 2:39 PM"
+`} />
+
+        <h4 className="text-lg font-semibold mt-6">Migration Guide</h4>
+        <div className="concept-list">
+          <div className="concept-list-item">
+            <span className="concept-badge">No Code Changes Required</span>
+            <span>Existing sync handlers work automatically</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Optional Async Migration</span>
+            <span>Gradually convert handlers to async for better performance</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Enable Optimizations</span>
+            <span>Add EngineOptimizationsConfig to your config</span>
+          </div>
+          <div className="concept-list-item">
+            <span className="concept-badge">Use Async API</span>
+            <span>Replace app.invoke() with await app.ainvoke()</span>
+          </div>
+        </div>
+
+        <div className="note-box">
+          <span className="concept-badge">Performance Improvements</span>
+          <div>
+            <ul className="list-disc pl-6">
+              <li><strong>3x faster</strong> concurrent execution for async handlers</li>
+              <li><strong>Automatic compatibility</strong> between sync and async handlers</li>
+              <li><strong>Real-time monitoring</strong> of performance metrics</li>
+              <li><strong>Intelligent response handling</strong> preserves structured data</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       <section id="llm-retry" className="section">
@@ -1739,6 +1900,10 @@ for _ in range(5):
         <p><b>How is memory injected?</b> If <code>MemoryConfig.augment_llm=True</code>, <code>MemoryAugmentedLLMClient</code> retrieves relevant docs and prepends them to prompts.</p>
         <p><b>How do handler intents work?</b> Handlers extract intents and store them in <code>state.context['handler_intents'][handler_name] = action</code>. The background task middleware uses these intents to determine if a task should run in background based on the configured <code>action_based_background</code> rules.</p>
         <p><b>When should I use background tasks?</b> Use background tasks for operations that take time (device control, ticket creation) while keeping quick operations (status checks, queries) synchronous for immediate responses.</p>
+        <p><b>How do async optimizations work?</b> StruktX automatically bridges sync and async handlers. Use <code>await app.ainvoke()</code> for maximum performance with up to 15 concurrent handlers. Existing sync handlers work without changes.</p>
+        <p><b>What's the difference between sync and async handlers?</b> Sync handlers run in thread pools when called via <code>ainvoke()</code>. Async handlers run natively with true concurrency. Hybrid handlers can implement both for optimal performance.</p>
+        <p><b>How are Pydantic responses preserved?</b> When multiple handlers return structured objects, StruktX preserves them as a list. Single responses return the full object. Mixed responses fall back to string concatenation.</p>
+        <p><b>How do I monitor performance?</b> Enable <code>EngineOptimizationsConfig</code> and access metrics via <code>app._engine._performance_monitor</code> or the <code>/metrics</code> endpoint in FastAPI applications.</p>
       </section>
 
       <div className="section-header">

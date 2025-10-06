@@ -34,7 +34,6 @@ class DictData(BaseModel):
         return self.data.values()
 
 
-
 class CacheStrategy(str, Enum):
     """Strategies for cache matching and invalidation."""
 
