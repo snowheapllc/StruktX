@@ -14,7 +14,7 @@ from datetime import datetime
 from strukt.middleware import Middleware
 from strukt.types import HandlerResult, InvocationState, BackgroundTaskInfo
 from strukt.logging import get_logger
-from strukt.tracing import strukt_trace, unified_trace_context
+from strukt.tracing import strukt_trace, register_background_task, complete_background_task
 
 
 class TaskStatus(Enum):
@@ -270,6 +270,9 @@ class BackgroundTaskMiddleware(Middleware):
         with self._lock:
             self._tasks[task_id] = task
 
+        # Register this background task with the trace system
+        register_background_task(current_thread_id, task_id)
+        
         # Submit task to thread pool
         future = self._executor.submit(
             self._execute_background_task,
@@ -318,7 +321,7 @@ class BackgroundTaskMiddleware(Middleware):
                 if task_id in self._tasks:
                     self._tasks[task_id].progress = 0.1
 
-            # Use the parent thread context to ensure nesting under main trace
+            # Get thread_id for task completion tracking
             thread_id = parent_thread_id
             if not thread_id:
                 try:
@@ -327,10 +330,9 @@ class BackgroundTaskMiddleware(Middleware):
                 except Exception:
                     thread_id = None
 
-            # Execute the actual handler within the parent trace context
-            # This ensures the background task appears nested under the main Engine.run
-            with unified_trace_context(thread_id, f"BackgroundTask.{query_type}"):
-                result = handler.handle(state, parts)
+            # Execute the handler - it will automatically nest under the weave.thread()
+            # context established by the root trace in Engine.run
+            result = handler.handle(state, parts)
 
             # Update progress to indicate completion
             with self._lock:
@@ -340,6 +342,9 @@ class BackgroundTaskMiddleware(Middleware):
                     task.completed_at = datetime.now()
                     task.progress = 1.0
                     task.result = result
+
+            # Mark task as complete in trace system
+            complete_background_task(thread_id, task_id)
 
             self._log.info(
                 f"[BACKGROUND TASK] Task {task_id} completed successfully for '{query_type}'"
@@ -364,6 +369,10 @@ class BackgroundTaskMiddleware(Middleware):
             self._log.error(
                 f"[BACKGROUND TASK] Task {task_id} failed for '{query_type}': {e}"
             )
+
+            # Mark task as complete in trace system (even on error)
+            if thread_id:
+                complete_background_task(thread_id, task_id)
 
             with self._lock:
                 if task_id in self._tasks:

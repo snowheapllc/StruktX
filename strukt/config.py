@@ -116,6 +116,8 @@ class TracingConfig:
     collapse_status_ops: bool = True  # collapse status events into attributes
     # Display label to use for Engine ops (e.g., "Engine", "Runner", "StruktX")
     component_label: str = "Engine"
+    # Optional prefix for trace names (format: [prefix-]userID-unitID-UUID-timestamp)
+    trace_name_prefix: str | None = None
 
 
 @dataclass

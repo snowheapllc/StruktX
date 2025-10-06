@@ -33,6 +33,7 @@ from .tracing import (
     strukt_trace,
     unified_trace_context,
     generate_trace_name,
+    add_trace_attributes,
 )
 from .evaluation import log_post_run_evaluation
 
@@ -73,10 +74,37 @@ class Engine:
 
         if self._weave_available:
             self._logger.info("Engine initialized with Weave logging enabled")
-            # Apply dynamic tracing decorators with component label
-            self._apply_dynamic_tracing()
+            # Apply tracing decorators to create waterfall view
+            self._apply_tracing()
         else:
             self._logger.info("Engine initialized without Weave logging")
+    
+    def _apply_tracing(self):
+        """Apply @weave.op decorators to key methods for waterfall tracing."""
+        try:
+            # Apply tracing to internal async methods
+            self._aclassify = strukt_trace(
+                name="StruktX.Engine.classify",
+                call_display_name="Classify Query"
+            )(self._aclassify)
+            
+            self._aexecute_grouped_handlers = strukt_trace(
+                name="StruktX.Engine.execute_handlers",
+                call_display_name="Execute Handlers"
+            )(self._aexecute_grouped_handlers)
+            
+            self._aexecute_handlers_parallel = strukt_trace(
+                name="StruktX.Engine.handlers_parallel",
+                call_display_name="Execute Handlers (Parallel)"
+            )(self._aexecute_handlers_parallel)
+            
+            self._aexecute_single_handler = strukt_trace(
+                name="StruktX.Engine.single_handler",
+                call_display_name="Execute Handler"
+            )(self._aexecute_single_handler)
+            
+        except Exception as e:
+            self._logger.debug(f"Failed to apply tracing: {e}")
 
     def _should_auto_track_user_context(self) -> bool:
         """Check if we should automatically track user context from operations."""
@@ -253,39 +281,6 @@ class Engine:
             pass
         return "Engine"
 
-    def _apply_dynamic_tracing(self):
-        """Apply tracing decorators dynamically with the correct component label."""
-        try:
-            component_label = self._get_component_label()
-
-            # Apply tracing to key methods with dynamic component label
-            self.run = strukt_trace(
-                name="StruktX.Engine.run", call_display_name=f"{component_label}.run"
-            )(self.run)
-
-            self._classify = strukt_trace(
-                name="StruktX.Engine.classify",
-                call_display_name=f"{component_label}.classify",
-            )(self._classify)
-
-            self._execute_grouped_handlers = strukt_trace(
-                name="StruktX.Engine.execute_grouped_handlers",
-                call_display_name=f"{component_label}.execute_grouped_handlers",
-            )(self._execute_grouped_handlers)
-
-            self._execute_handlers_parallel = strukt_trace(
-                name="StruktX.Engine.execute_handlers_parallel",
-                call_display_name=f"{component_label}.execute_handlers_parallel",
-            )(self._execute_handlers_parallel)
-
-            self._execute_single_handler = strukt_trace(
-                name="StruktX.Engine.execute_single_handler",
-                call_display_name=f"{component_label}.execute_single_handler",
-            )(self._execute_single_handler)
-
-        except Exception as e:
-            self._logger.debug(f"Failed to apply dynamic tracing: {e}")
-
     def run(self, state: InvocationState) -> list[HandlerResult]:
         """Main engine run method - all operations will be nested under this call."""
         # Determine thread/session id for grouping
@@ -298,8 +293,13 @@ class Engine:
         except Exception:
             thread_id = None
 
-        # Generate custom trace name using userID-unitID-threadID-timestamp format
-        custom_trace_name = generate_trace_name(user_context)
+        # Get trace name prefix from tracing config
+        prefix = None
+        if self._tracing_config is not None:
+            prefix = getattr(self._tracing_config, "trace_name_prefix", None)
+        
+        # Generate custom trace name using [prefix-]userID-unitID-UUID-timestamp format
+        custom_trace_name = generate_trace_name(user_context, prefix=prefix)
 
         # Get component label from tracing config
         label = self._get_component_label()
@@ -309,8 +309,9 @@ class Engine:
         display_context = user_id if user_id else "context"
 
         # Use unified trace context to ensure everything is nested
+        # Mark as root trace to wait for all background tasks
         with unified_trace_context(
-            thread_id, f"{label}.run({display_context})", custom_trace_name
+            thread_id, f"{label}.run({display_context})", custom_trace_name, is_root=True
         ):
             start_time = time.time()
             run_id = str(uuid.uuid4())
@@ -352,8 +353,13 @@ class Engine:
         except Exception:
             thread_id = None
 
-        # Generate custom trace name using userID-unitID-threadID-timestamp format
-        custom_trace_name = generate_trace_name(user_context)
+        # Get trace name prefix from tracing config
+        prefix = None
+        if self._tracing_config is not None:
+            prefix = getattr(self._tracing_config, "trace_name_prefix", None)
+        
+        # Generate custom trace name using [prefix-]userID-unitID-UUID-timestamp format
+        custom_trace_name = generate_trace_name(user_context, prefix=prefix)
 
         # Get component label from tracing config
         label = self._get_component_label()
@@ -362,39 +368,93 @@ class Engine:
         user_id = user_context.get("user_id") if user_context else None
         display_context = user_id if user_id else "context"
 
-        # Use unified trace context to ensure everything is nested
-        with unified_trace_context(
-            thread_id, f"{label}.arun({display_context})", custom_trace_name
-        ):
-            start_time = time.time()
-            run_id = str(uuid.uuid4())
+        # Create a dynamic @weave.op with the custom trace name
+        try:
+            import weave
+            
+            @weave.op(name="StruktX.Request", call_display_name=custom_trace_name)
+            async def _traced_request():
+                """Root operation with custom trace name."""
+                start_time = time.time()
+                run_id = str(uuid.uuid4())
 
-            user_context = (
-                self._extract_user_context(state)
-                if self._should_auto_track_user_context()
-                else user_context
-            )
-
-            results = await self._arun_with_context(
-                state, start_time, run_id, user_context
-            )
-
-            # Post-run evaluation/logging (no-op unless enabled)
-            try:
-                display_name = None
-                if thread_id:
-                    display_name = f"engine_run:{thread_id}"
-                log_post_run_evaluation(
-                    getattr(self, "_evaluation_config", None),
-                    input_text=state.text,
-                    input_context=state.context,
-                    results=results,
-                    display_name=display_name,
+                extracted_context = (
+                    self._extract_user_context(state)
+                    if self._should_auto_track_user_context()
+                    else user_context
                 )
-            except Exception:
-                pass
 
-            return results
+                # Add initial trace attributes
+                add_trace_attributes({
+                    "engine.run_id": run_id,
+                    "engine.input_text": state.text,
+                    "engine.user_id": extracted_context.get("user_id") if extracted_context else None,
+                    "engine.unit_id": extracted_context.get("unit_id") if extracted_context else None,
+                    "engine.thread_name": custom_trace_name,
+                    "engine.async": True,
+                })
+
+                results = await self._arun_with_context(
+                    state, start_time, run_id, extracted_context
+                )
+
+                # Post-run evaluation/logging (no-op unless enabled)
+                try:
+                    display_name = None
+                    if thread_id:
+                        display_name = f"engine_run:{thread_id}"
+                    log_post_run_evaluation(
+                        getattr(self, "_evaluation_config", None),
+                        input_text=state.text,
+                        input_context=state.context,
+                        results=results,
+                        display_name=display_name,
+                    )
+                except Exception:
+                    pass
+
+                return results
+            
+            # Execute within unified trace context (weave.thread)
+            with unified_trace_context(
+                thread_id, f"{label}.arun({display_context})", custom_trace_name, is_root=True
+            ):
+                return await _traced_request()
+                
+        except ImportError:
+            # Weave not available, run without tracing
+            with unified_trace_context(
+                thread_id, f"{label}.arun({display_context})", custom_trace_name, is_root=True
+            ):
+                start_time = time.time()
+                run_id = str(uuid.uuid4())
+
+                user_context = (
+                    self._extract_user_context(state)
+                    if self._should_auto_track_user_context()
+                    else user_context
+                )
+
+                results = await self._arun_with_context(
+                    state, start_time, run_id, user_context
+                )
+
+                # Post-run evaluation/logging (no-op unless enabled)
+                try:
+                    display_name = None
+                    if thread_id:
+                        display_name = f"engine_run:{thread_id}"
+                    log_post_run_evaluation(
+                        getattr(self, "_evaluation_config", None),
+                        input_text=state.text,
+                        input_context=state.context,
+                        results=results,
+                        display_name=display_name,
+                    )
+                except Exception:
+                    pass
+
+                return results
 
     async def _arun_with_context(
         self,
@@ -416,6 +476,12 @@ class Engine:
         try:
             # Execute classification (async)
             state, classification = await self._aclassify(state, user_context)
+            
+            # Add classification attributes to trace
+            add_trace_attributes({
+                "classification.query_types": classification.query_types,
+                "classification.parts_count": len(classification.parts),
+            })
 
             # Check for fallback
             fallback = self._maybe_fallback_handler()
@@ -891,17 +957,33 @@ class Engine:
         start_time = time.time()
 
         try:
-            # Execute handler with proper async/await handling
+            # Execute handler with proper async/await handling and tracing
             async def _execute_handler():
-                """Inner function to properly handle async execution."""
-                # Call the handler's ahandle method
-                result = handler.ahandle(state, parts)
-
-                # Check if it's a coroutine that needs awaiting
-                if asyncio.iscoroutine(result):
-                    return await result
-                # If it's already a result, return it
-                return result
+                """Inner function to properly handle async execution with tracing."""
+                # Get handler name for display
+                handler_name = handler.__class__.__name__
+                
+                # Wrap handler execution with a weave.op for visibility
+                try:
+                    import weave
+                    
+                    @weave.op(
+                        name=f"Handler.{query_type}",
+                        call_display_name=f"{handler_name}"
+                    )
+                    async def _traced_handler():
+                        result = handler.ahandle(state, parts)
+                        if asyncio.iscoroutine(result):
+                            return await result
+                        return result
+                    
+                    return await _traced_handler()
+                except ImportError:
+                    # Weave not available, execute without tracing
+                    result = handler.ahandle(state, parts)
+                    if asyncio.iscoroutine(result):
+                        return await result
+                    return result
 
             # Execute with rate limiting
             async def _rate_limited_execution():

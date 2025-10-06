@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import os
 import threading
-import weakref
 import time
 import uuid
 from contextlib import contextmanager
@@ -16,23 +15,21 @@ _T = TypeVar("_T")
 F = TypeVar("F", bound=Callable[..., Any])
 
 # Global state for unified tracing
-_current_call_stack = threading.local()
-_root_call_registry = weakref.WeakValueDictionary()
 _trace_enabled = True
+_active_traces = {}  # Track active traces to wait for background tasks
+_trace_locks = {}  # Locks per trace to ensure completion
 
 
-def _get_current_call():
-    """Get the current call from thread-local storage."""
-    return getattr(_current_call_stack, "current_call", None)
-
-
-def _set_current_call(call):
-    """Set the current call in thread-local storage."""
-    _current_call_stack.current_call = call
-
-
-def generate_trace_name(context: dict = None) -> str:
-    """Generate a trace name in format: userID-unitID-threadID-timestamp"""
+def generate_trace_name(context: dict = None, prefix: str = None) -> str:
+    """Generate a trace name in format: [prefix-]userID-unitID-UUID-timestamp
+    
+    Args:
+        context: Context dict containing user_id, unit_id, thread_id/session_id
+        prefix: Optional prefix to prepend to the trace name
+        
+    Returns:
+        Formatted trace name string
+    """
     if not context:
         context = {}
 
@@ -46,56 +43,29 @@ def generate_trace_name(context: dict = None) -> str:
 
     timestamp = int(time.time())
 
+    # Build trace name with optional prefix
+    if prefix:
+        return f"{prefix}-{user_id}-{unit_id}-{thread_id}-{timestamp}"
     return f"{user_id}-{unit_id}-{thread_id}-{timestamp}"
 
 
-def _get_or_create_root_call(thread_id: str = None, custom_name: str = None):
-    """Get or create a root call for the current thread/session."""
-    if not _trace_enabled:
-        return None
-
-    try:
-        import weave
-
-        # Use thread_id if provided, otherwise generate one
-        if not thread_id:
-            thread_id = f"struktx_session_{threading.get_ident()}"
-
-        # Check if we already have a root call for this session
-        if thread_id in _root_call_registry:
-            return _root_call_registry[thread_id]
-
-        # Create display name - use custom_name if provided, otherwise default format
-        if custom_name:
-            display_name = custom_name
-        else:
-            display_name = f"Session[{thread_id}]"
-
-        # Create a new root call that will contain everything
-        @weave.op(name="StruktX.Session", call_display_name=display_name)
-        def _create_root_session():
-            return {
-                "session_id": thread_id,
-                "status": "active",
-                "display_name": display_name,
-            }
-
-        # Execute the root call to create the session
-        _, root_call = _create_root_session.call()
-
-        # Store in registry
-        _root_call_registry[thread_id] = root_call
-
-        return root_call
-    except Exception:
-        return None
 
 
 @contextmanager
 def unified_trace_context(
-    thread_id: str = None, operation_name: str = None, custom_name: str = None
+    thread_id: str = None, operation_name: str = None, custom_name: str = None, is_root: bool = False
 ):
-    """Context manager that ensures all operations are nested under a single root call."""
+    """Context manager for unified tracing with a single Weave operation.
+    
+    Uses weave.thread() to group all operations under a single thread ID.
+    The custom_name becomes the thread_id which shows up in Weave UI.
+    
+    Args:
+        thread_id: Unique identifier for the trace session
+        operation_name: Name of the current operation
+        custom_name: Custom display name for the trace (shows in Weave UI)
+        is_root: Whether this is the root trace that creates the weave.thread
+    """
     if not _trace_enabled:
         yield
         return
@@ -107,48 +77,146 @@ def unified_trace_context(
         if not thread_id:
             thread_id = str(uuid.uuid4())
 
-        # Get or create root call
-        root_call = _get_or_create_root_call(thread_id, custom_name)
-        if not root_call:
-            yield
-            return
+        # For root traces, establish the weave.thread context
+        if is_root:
+            # Track this trace as active
+            _active_traces[thread_id] = {
+                "background_tasks": [],
+                "pending_count": 0,
+                "start_time": time.time(),
+                "attributes": {},
+            }
+            _trace_locks[thread_id] = threading.Lock()
 
-        # Set up thread context if we have a thread_id
-        thread_ctx = None
-        if thread_id:
             try:
-                thread_ctx = weave.thread(thread_id)
-            except Exception:
-                thread_ctx = None
-
-        # Use the thread context and ensure we're in the root call's context
-        ctx_mgr = thread_ctx if thread_ctx else contextlib.nullcontext()
-
-        try:
-            with ctx_mgr:
-                # Store previous call and set current
-                prev_call = _get_current_call()
-                _set_current_call(root_call)
-
-                try:
-                    yield root_call
-                finally:
-                    _set_current_call(prev_call)
-        except GeneratorExit:
-            # Handle generator cleanup gracefully
-            pass
-        except Exception:
-            # Handle any other exceptions gracefully
+                # Use weave.thread with custom_name as the thread_id
+                # This groups all child @weave.op calls under this thread
+                with weave.thread(thread_id=custom_name or thread_id):
+                    try:
+                        yield
+                    finally:
+                        # Wait for background tasks before thread ends
+                        _wait_for_trace_completion(thread_id, timeout=10.0)
+                    
+            finally:
+                # Cleanup
+                with contextlib.suppress(Exception):
+                    if thread_id in _active_traces:
+                        del _active_traces[thread_id]
+                    if thread_id in _trace_locks:
+                        del _trace_locks[thread_id]
+        else:
+            # Non-root operations just yield within the existing thread context
             yield
-
+                        
     except Exception:
-        yield
+        # Cleanup on error
+        if is_root and thread_id in _active_traces:
+            with contextlib.suppress(Exception):
+                del _active_traces[thread_id]
+                del _trace_locks[thread_id]
+        raise
+
+
+
+
+def _wait_for_trace_completion(thread_id: str, timeout: float = 5.0):
+    """Wait for all background tasks in a trace to complete before session ends.
+    
+    This is called within the weave.thread() context to ensure background tasks
+    are captured in the trace.
+    
+    Args:
+        thread_id: The trace session ID
+        timeout: Maximum time to wait in seconds
+    """
+    if thread_id not in _active_traces:
+        return
+        
+    start_wait = time.time()
+    
+    # Wait for all background tasks to complete
+    while time.time() - start_wait < timeout:
+        if thread_id not in _trace_locks:
+            break
+            
+        with _trace_locks[thread_id]:
+            trace_info = _active_traces.get(thread_id)
+            if not trace_info or trace_info["pending_count"] == 0:
+                break
+                
+        # Check periodically
+        time.sleep(0.05)
+
+
+def register_background_task(thread_id: str, task_id: str):
+    """Register a background task for a trace session.
+    
+    Args:
+        thread_id: The trace session ID
+        task_id: Unique ID for the background task
+    """
+    if thread_id not in _active_traces:
+        return
+        
+    with _trace_locks[thread_id]:
+        trace_info = _active_traces.get(thread_id)
+        if trace_info:
+            trace_info["background_tasks"].append(task_id)
+            trace_info["pending_count"] += 1
+
+
+def complete_background_task(thread_id: str, task_id: str):
+    """Mark a background task as complete for a trace session.
+    
+    Args:
+        thread_id: The trace session ID
+        task_id: Unique ID for the background task
+    """
+    if thread_id not in _active_traces:
+        return
+        
+    with _trace_locks[thread_id]:
+        trace_info = _active_traces.get(thread_id)
+        if trace_info and task_id in trace_info["background_tasks"]:
+            trace_info["pending_count"] = max(0, trace_info["pending_count"] - 1)
+
+
+def add_trace_attributes(attributes: dict[str, Any]) -> None:
+    """Add attributes to the current trace.
+    
+    Uses weave.attributes() to add metadata to the current operation.
+    
+    Args:
+        attributes: Dictionary of attributes to add to the current trace
+    """
+    if not _trace_enabled:
+        return
+    
+    try:
+        import weave
+        
+        # Use weave.attributes context manager
+        # This adds attributes to the current @weave.op in the call stack
+        with weave.attributes(attributes):
+            # Attributes are applied to the current trace
+            return
+    except Exception:
+        # Silently fail if attributes can't be added
+        pass
 
 
 def strukt_trace(
-    name: str = None, call_display_name: str = None, attributes: dict = None
+    name: str = None, call_display_name: str = None
 ):
-    """Decorator that ensures all StruktX operations are nested under the unified trace."""
+    """Decorator that creates a @weave.op to trace operations.
+    
+    This creates a proper @weave.op that will be nested under the weave.thread()
+    context established by unified_trace_context.
+    
+    NOTE: Currently disabled by default. Use add_trace_attributes() instead
+    for simpler attribute-based tracing.
+    """
 
     def decorator(func: F) -> F:
         if not _trace_enabled:
@@ -159,7 +227,7 @@ def strukt_trace(
         except ImportError:
             return func
 
-        # Generate name if not provided
+        # Generate operation name
         if not name:
             class_name = ""
             if hasattr(func, "__qualname__") and "." in func.__qualname__:
@@ -170,80 +238,13 @@ def strukt_trace(
         else:
             op_name = name
 
-        def wrapper(*args, **kwargs):
-            try:
-                # Try to extract thread_id from various sources
-                thread_id = None
-
-                # Check if first arg has context (like InvocationState)
-                if (
-                    args
-                    and hasattr(args[0], "context")
-                    and isinstance(args[0].context, dict)
-                ):
-                    thread_id = args[0].context.get("thread_id") or args[0].context.get(
-                        "session_id"
-                    )
-
-                # Check kwargs for context
-                if not thread_id and "state" in kwargs:
-                    state = kwargs["state"]
-                    if hasattr(state, "context") and isinstance(state.context, dict):
-                        thread_id = state.context.get("thread_id") or state.context.get(
-                            "session_id"
-                        )
-
-                # Generate UUID if thread_id is missing
-                if not thread_id:
-                    thread_id = str(uuid.uuid4())
-
-                # Prepare attributes
-                call_attrs = dict(attributes or {})
-                call_attrs.update(
-                    {
-                        "struktx.component": True,
-                        "struktx.operation": func.__name__,
-                        "struktx.thread_id": thread_id,
-                    }
-                )
-
-                # Execute function and capture result
-                result = func(*args, **kwargs)
-
-                # Add result to attributes for better visibility
-                if result is not None:
-                    try:
-                        if hasattr(result, "__dict__"):
-                            call_attrs["struktx.result"] = result.__dict__
-                        elif isinstance(result, (dict, list, str, int, float, bool)):
-                            call_attrs["struktx.result"] = result
-                        else:
-                            call_attrs["struktx.result"] = str(result)
-                    except Exception:
-                        call_attrs["struktx.result"] = str(result)
-
-                # Apply attributes to current trace
-                with weave.attributes(call_attrs):
-                    # Attributes are attached to the current trace context
-                    pass
-
-                return result
-
-            except Exception:
-                # If anything fails with tracing, just run the function
-                return func(*args, **kwargs)
-
-        # Apply weave.op decorator with error handling
+        # Apply @weave.op decorator with custom name
         try:
-            # Allow dynamic display names via attributes (e.g., component label)
-            display_name = call_display_name or op_name
-            traced_func = weave.op(name=op_name, call_display_name=display_name)(
-                wrapper
-            )
+            traced_func = weave.op(name=op_name, call_display_name=call_display_name or op_name)(func)
             return cast(F, traced_func)
         except Exception:
-            # If weave.op fails, return the wrapper without weave.op
-            return cast(F, wrapper)
+            # If weave.op fails, return original function
+            return func
 
     return decorator
 
@@ -335,92 +336,20 @@ def disable_global_tracing():
 
 # Auto-instrument all StruktX base classes
 def auto_instrument_struktx():
-    """Automatically instrument all StruktX base classes and their methods."""
-    if not _trace_enabled:
-        return
-
-    try:
-        # Try to import modules, but don't fail if they're not available
-        try:
-            from . import interfaces
-        except ImportError:
-            interfaces = None
-
-        try:
-            from . import defaults
-        except ImportError:
-            defaults = None
-
-        # Instrument base interface classes
-        if interfaces:
-            for cls_name in ["Classifier", "Handler", "MemoryEngine"]:
-                try:
-                    cls = getattr(interfaces, cls_name, None)
-                    if cls and not hasattr(cls, "__subclasshook__"):  # Skip protocols
-                        _instrument_class_methods(cls, f"StruktX.{cls_name}")
-                except Exception:
-                    continue
-
-        # Instrument default implementations
-        if defaults:
-            for cls_name in [
-                "SimpleClassifier",
-                "GeneralHandler",
-                "SimpleLLMClient",
-                "UniversalLLMLogger",
-            ]:
-                try:
-                    cls = getattr(defaults, cls_name, None)
-                    if cls:
-                        _instrument_class_methods(cls, f"StruktX.{cls_name}")
-                except Exception:
-                    continue
-
-    except Exception:
-        # Silently fail if instrumentation fails
-        pass
+    """Automatically instrument all StruktX base classes and their methods.
+    
+    NOTE: Auto-instrumentation is disabled by default to prevent creating
+    multiple traces. Use add_trace_attributes() manually in critical paths.
+    """
+    # Disabled - causes multiple trace creation issues
+    # Instead, critical operations should manually call add_trace_attributes()
+    pass
 
 
 def _instrument_class_methods(cls, prefix: str):
-    """Instrument all methods of a class with unified tracing."""
-    try:
-        # Get all methods to instrument
-        methods_to_trace = []
-        try:
-            for attr_name in dir(cls):
-                if attr_name.startswith("_"):
-                    continue
-
-                try:
-                    attr = getattr(cls, attr_name)
-                    if callable(attr) and not isinstance(
-                        attr, (property, staticmethod, classmethod)
-                    ):
-                        methods_to_trace.append((attr_name, attr))
-                except Exception:
-                    continue
-        except Exception:
-            return
-
-        # Instrument each method
-        for method_name, method in methods_to_trace:
-            try:
-                if hasattr(method, "_strukt_traced"):
-                    continue  # Already instrumented
-
-                # Create traced version
-                traced_method = strukt_trace(
-                    name=f"{prefix}.{method_name}",
-                    call_display_name=f"{cls.__name__}.{method_name}",
-                )(method)
-
-                # Mark as traced and replace
-                traced_method._strukt_traced = True
-                setattr(cls, method_name, traced_method)
-
-            except Exception:
-                # Skip this method if instrumentation fails
-                continue
-
-    except Exception:
-        pass
+    """Instrument all methods of a class with unified tracing.
+    
+    NOTE: This is disabled to prevent creating multiple traces.
+    """
+    # Disabled - causes multiple trace creation issues
+    pass
