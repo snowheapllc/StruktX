@@ -5,6 +5,7 @@ import json
 import os
 import contextlib
 from typing import Any, Dict, Optional, Callable, TypeVar, cast
+import weave.integrations
 from weave.trace.autopatch import AutopatchSettings
 
 from rich.console import Console
@@ -74,6 +75,7 @@ class StruktLogger:
             # Initialize Weave with the project - disable autopatching to prevent LangChain noise
             # Autopatch creates automatic @weave.op traces for LangChain, OpenAI, etc.
             # We disable it to have full control over what gets traced
+            os.environ["WEAVE_IMPLICITLY_PATCH_INTEGRATIONS"] = "false"
             weave.init(
                 project_name=f"{self._weave_project_name}-{self._weave_environment}",
                 autopatch_settings=AutopatchSettings(
