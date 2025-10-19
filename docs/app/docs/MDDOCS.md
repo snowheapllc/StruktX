@@ -515,6 +515,278 @@ dict(
 
 Consent decisions are persisted through your configured MemoryEngine when available.
 
+### FastMCP v2 Integration
+
+StruktX now includes a modern FastMCP v2 integration that provides improved performance, better compliance with the MCP specification, and enhanced maintainability. This is the recommended approach for new projects.
+
+#### Key Features
+
+- **FastMCP v2 Framework**: Built on the latest FastMCP library for better performance and compliance
+- **Convention-based Discovery**: Automatically discovers `mcp_*` methods on handlers
+- **Multiple Transports**: Support for stdio, SSE, and HTTP transports
+- **Enhanced Authentication**: Improved API key authentication with configurable headers
+- **Middleware Integration**: Seamless integration with StruktX middleware system
+- **Async Support**: Full async/await support for better performance
+
+#### Quick Start
+
+Enable FastMCP v2 in your configuration:
+
+```python
+from strukt import StruktConfig, MCPv2Config, MCPAuthAPIKeyConfig
+
+config = StruktConfig(
+    # ... other config ...
+    mcp_v2=MCPv2Config(
+        enabled=True,
+        server_name="my-struktx-mcp",
+        transport="http",  # stdio, sse, or http
+        include_handlers=[
+            "time_query",
+            "weather_query", 
+            "web_search_query",
+            "device_control_query"
+        ],
+        auth_api_key=MCPAuthAPIKeyConfig(
+            enabled=True,
+            header_name="x-api-key",
+            env_var="STRUKTX_MCP_API_KEY"
+        ),
+        # HTTP transport settings
+        http_host="localhost",
+        http_port=8000
+    )
+)
+```
+
+#### Handler Integration
+
+Handlers with `mcp_*` methods are automatically discovered and exposed as MCP tools:
+
+```python
+from strukt.interfaces import Handler
+from typing import Dict, Any
+
+class WeatherHandler(Handler):
+    def __init__(self, toolkit, llm_client):
+        self.toolkit = toolkit
+        self.llm_client = llm_client
+
+    # Regular StruktX handler method
+    def handle(self, state, parts):
+        # ... handler logic ...
+        pass
+
+    # MCP tool methods (automatically discovered)
+    async def mcp_current(self, *, location: str) -> Dict[str, Any]:
+        """Get current weather data for a location."""
+        return await self.toolkit.get_current_weather_data(location)
+
+    async def mcp_forecast(self, *, location: str, days: int = 5) -> Dict[str, Any]:
+        """Get weather forecast for a location."""
+        return await self.toolkit.get_forecast_data(location, days=days)
+```
+
+#### Transport Options
+
+**HTTP Transport (Recommended for Production)**
+
+```python
+config = StruktConfig(
+    mcp_v2=MCPv2Config(
+        enabled=True,
+        transport="http",
+        http_host="0.0.0.0",
+        http_port=8000,
+        auth_api_key=MCPAuthAPIKeyConfig(enabled=True)
+    )
+)
+
+# Start the server
+from strukt.mcp_v2 import run_http
+run_http(config)
+```
+
+**SSE Transport (Server-Sent Events)**
+
+```python
+config = StruktConfig(
+    mcp_v2=MCPv2Config(
+        enabled=True,
+        transport="sse",
+        sse_host="localhost",
+        sse_port=8000
+    )
+)
+
+from strukt.mcp_v2 import run_sse
+run_sse(config)
+```
+
+**Stdio Transport (CLI Integration)**
+
+```python
+config = StruktConfig(
+    mcp_v2=MCPv2Config(
+        enabled=True,
+        transport="stdio"
+    )
+)
+
+from strukt.mcp_v2 import run_stdio
+run_stdio(config)
+```
+
+#### FastAPI Integration
+
+Mount FastMCP v2 on an existing FastAPI application:
+
+```python
+from fastapi import FastAPI
+from strukt import create, StruktConfig
+from strukt.mcp_v2 import build_fastapi_app
+
+# Create your StruktX app
+config = StruktConfig(
+    mcp_v2=MCPv2Config(
+        enabled=True,
+        transport="http",
+        auth_api_key=MCPAuthAPIKeyConfig(enabled=True)
+    )
+)
+app = create(config)
+
+# Create FastAPI app with MCP endpoints
+fastapi_app = build_fastapi_app(app, config)
+
+# Or mount on existing FastAPI app
+existing_app = FastAPI()
+build_fastapi_app(app, config, app=existing_app, prefix="/mcp")
+```
+
+#### API Endpoints
+
+**List Available Tools (GET)**
+```bash
+curl -H "x-api-key: your-api-key" http://localhost:8000/v1/mcp
+```
+
+**Execute Tool (POST)**
+```bash
+curl -X POST "http://localhost:8000/v1/mcp" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: your-api-key" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "weather_query_current",
+      "arguments": {
+        "location": "New York"
+      }
+    }
+  }'
+```
+
+#### Configuration Reference
+
+**MCPv2Config**
+
+- `enabled`: Enable FastMCP v2 integration (default: `False`)
+- `server_name`: Server identifier (default: `None`)
+- `include_handlers`: List of handler keys to expose (default: `[]` - all handlers)
+- `transport`: Transport type - `"stdio"`, `"sse"`, or `"http"` (default: `"stdio"`)
+- `sse_host`: Host for SSE transport (default: `"localhost"`)
+- `sse_port`: Port for SSE transport (default: `8000`)
+- `http_host`: Host for HTTP transport (default: `"localhost"`)
+- `http_port`: Port for HTTP transport (default: `8000`)
+- `auth_api_key`: API key authentication configuration
+
+**MCPAuthAPIKeyConfig**
+
+- `enabled`: Enable API key authentication (default: `False`)
+- `header_name`: Request header name for API key (default: `"x-api-key"`)
+- `env_var`: Environment variable containing the API key (default: `"STRUKTX_MCP_API_KEY"`)
+
+#### Migration from MCP v1
+
+To migrate from the legacy MCP v1 integration:
+
+1. **Update Configuration**: Replace `mcp` config with `mcp_v2` config
+2. **Update Imports**: Change imports from `strukt.mcp` to `strukt.mcp_v2`
+3. **Handler Methods**: Ensure `mcp_*` methods are `async` if they perform async operations
+4. **API Endpoints**: Update endpoint paths from `/mcp` to `/v1/mcp`
+5. **Authentication**: Update header names if using custom authentication
+
+**Before (MCP v1):**
+```python
+config = StruktConfig(
+    mcp=dict(
+        enabled=True,
+        server_name="my-mcp",
+        include_handlers=["weather", "time"]
+    )
+)
+```
+
+**After (FastMCP v2):**
+```python
+config = StruktConfig(
+    mcp_v2=MCPv2Config(
+        enabled=True,
+        server_name="my-mcp",
+        transport="http",
+        include_handlers=["weather", "time"],
+        auth_api_key=MCPAuthAPIKeyConfig(enabled=True)
+    )
+)
+```
+
+#### AWS Fargate Deployment
+
+For production deployment on AWS Fargate:
+
+```python
+import os
+
+config = StruktConfig(
+    mcp_v2=MCPv2Config(
+        enabled=True,
+        server_name="struktx-mcp",
+        transport="http",
+        include_handlers=[
+            "time_query",
+            "weather_query",
+            "web_search_query",
+            "device_control_query"
+        ],
+        auth_api_key=MCPAuthAPIKeyConfig(
+            enabled=True,
+            header_name="x-api-key",
+            env_var="STRUKTX_MCP_API_KEY"
+        ),
+        # AWS Fargate configuration
+        http_host=os.getenv("MCP_BASE_URL", "https://your-domain.com").replace("https://", "").replace("http://", ""),
+        http_port=443  # HTTPS port
+    )
+)
+```
+
+Environment variables for AWS Fargate:
+- `MCP_BASE_URL`: Your Fargate service URL (e.g., `https://ai-stage-ae.roomi-services.com`)
+- `MCP_TRANSPORT`: Transport type (e.g., `http`)
+- `STRUKTX_MCP_API_KEY`: Your API key for authentication
+
+#### Best Practices
+
+1. **Use HTTP Transport**: For production deployments, use HTTP transport for better reliability
+2. **Enable Authentication**: Always enable API key authentication in production
+3. **Async Methods**: Make `mcp_*` methods `async` if they perform async operations
+4. **Error Handling**: Implement proper error handling in your `mcp_*` methods
+5. **Documentation**: Use descriptive docstrings for your `mcp_*` methods as they become tool descriptions
+6. **Testing**: Test your MCP tools thoroughly before deploying to production
+
 ### LangChain Helpers
 
 Use `LangChainLLMClient` and `create_structured_chain` to generate typed outputs.

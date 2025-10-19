@@ -24,7 +24,7 @@ from .types import (
     StruktResponse,
     BackgroundTaskInfo,
 )
-from .mcp.asgi import build_fastapi_app
+from .mcp_v2.asgi import build_fastapi_app
 
 __all__ = [
     "create",

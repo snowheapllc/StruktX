@@ -83,6 +83,23 @@ class MCPConfig:
 
 
 @dataclass
+class MCPv2Config:
+    """Configuration for FastMCP v2 integration."""
+
+    enabled: bool = False
+    server_name: str | None = None  # e.g. "struktx-mcp"
+    include_handlers: List[str] = field(default_factory=list)  # handler keys to expose
+    transport: str = "stdio"  # stdio, sse, http
+    sse_host: str = "localhost"
+    sse_port: int = 8000
+    http_host: str = "localhost"
+    http_port: int = 8000
+    auth_api_key: MCPAuthAPIKeyConfig = field(default_factory=MCPAuthAPIKeyConfig)
+    # Note: FastMCP v2 uses convention-based tool discovery (mcp_* methods)
+    # so explicit tool configuration is not needed
+
+
+@dataclass
 class WeaveConfig:
     enabled: bool = False
     project_name: str | None = None  # If None, will use PROJECT_NAME env var
@@ -173,6 +190,7 @@ class StruktConfig:
     handlers: HandlersConfig = field(default_factory=HandlersConfig)
     extras: ExtrasConfig = field(default_factory=ExtrasConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
+    mcp_v2: MCPv2Config = field(default_factory=MCPv2Config)
     weave: WeaveConfig = field(default_factory=WeaveConfig)
     opentelemetry: OpenTelemetryConfig = field(default_factory=OpenTelemetryConfig)
     tracing: TracingConfig = field(default_factory=TracingConfig)

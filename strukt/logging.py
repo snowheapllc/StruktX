@@ -5,7 +5,6 @@ import json
 import os
 import contextlib
 from typing import Any, Dict, Optional, Callable, TypeVar, cast
-import weave.integrations
 from weave.trace.autopatch import AutopatchSettings
 
 from rich.console import Console
