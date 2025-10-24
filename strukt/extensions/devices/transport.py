@@ -20,10 +20,10 @@ from .models import DeviceCommand
 class DeviceTransport(Protocol):
     """Abstract transport for device discovery and command execution."""
 
-    def list_devices(self, *, user_id: str, unit_id: str) -> List[Dict[str, Any]]: ...
+    def list_devices(self, *, user_id: str, unit_id: str, request_id: Optional[str] = None) -> List[Dict[str, Any]]: ...
 
     def execute(
-        self, *, commands: Iterable[DeviceCommand], user_id: str, unit_id: str
+        self, *, commands: Iterable[DeviceCommand], user_id: str, unit_id: str, request_id: Optional[str] = None
     ) -> Dict[str, Any]: ...
 
 
@@ -59,9 +59,9 @@ class AWSSignedHttpTransport(BaseAWSTransport):
         )
         self._payload_builder = payload_builder
 
-    def list_devices(self, *, user_id: str, unit_id: str) -> List[Dict[str, Any]]:
+    def list_devices(self, *, user_id: str, unit_id: str, request_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List devices for a user/unit."""
-        response = self._make_request(method="GET", user_id=user_id, unit_id=unit_id)
+        response = self._make_request(method="GET", user_id=user_id, unit_id=unit_id, request_id=request_id)
         data = response.json()
 
         # Flexible response shape: prefer top-level 'devices', else passthrough list
@@ -72,7 +72,7 @@ class AWSSignedHttpTransport(BaseAWSTransport):
         return []
 
     def execute(
-        self, *, commands: Iterable[DeviceCommand], user_id: str, unit_id: str
+        self, *, commands: Iterable[DeviceCommand], user_id: str, unit_id: str, request_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Execute device commands."""
         # Build device list
@@ -107,7 +107,7 @@ class AWSSignedHttpTransport(BaseAWSTransport):
             }
 
         self._make_request(
-            method="POST", user_id=user_id, unit_id=unit_id, body=wrapped
+            method="POST", user_id=user_id, unit_id=unit_id, body=wrapped, request_id=request_id
         )
 
         return {

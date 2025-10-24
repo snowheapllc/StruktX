@@ -374,6 +374,7 @@ class BaseAWSTransport:
         user_id: str,
         unit_id: str,
         body: Optional[bytes] = None,
+        request_id: Optional[str] = None,
     ) -> Dict[str, str]:
         """Generate signed headers for AWS requests."""
         headers: Dict[str, str] = {
@@ -381,6 +382,8 @@ class BaseAWSTransport:
             self._unit_header: unit_id,
             "Content-Type": self._content_type,
         }
+        if request_id:
+            headers["x-roomi-request-id"] = request_id
         if self._signer is not None:
             # Include body hash header to ensure SigV4 covers the payload
             try:
@@ -402,6 +405,7 @@ class BaseAWSTransport:
         unit_id: str,
         body: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
+        request_id: Optional[str] = None,
     ) -> httpx.Response:
         """Make a signed HTTP request to the AWS endpoint."""
         url = f"{self._base_url}{endpoint}"
@@ -416,7 +420,7 @@ class BaseAWSTransport:
 
         # Get signed headers
         request_headers = self._signed_headers(
-            method=method, url=url, user_id=user_id, unit_id=unit_id, body=body_bytes
+            method=method, url=url, user_id=user_id, unit_id=unit_id, body=body_bytes, request_id=request_id
         )
 
         # Merge with additional headers
@@ -425,7 +429,7 @@ class BaseAWSTransport:
 
         # Log request details if enabled
         if self._log_responses:
-            self._log_request_details(method, url, request_headers, body)
+            self._log_request_details(method, url, request_headers, body, request_id)
 
         # Make request
         if method.upper() == "GET":
@@ -447,7 +451,7 @@ class BaseAWSTransport:
 
         # Log response details if enabled
         if self._log_responses:
-            self._log_response_details(response)
+            self._log_response_details(response, request_id)
 
         return response
 
@@ -457,6 +461,7 @@ class BaseAWSTransport:
         url: str,
         headers: Dict[str, str],
         body: Optional[Dict[str, Any]],
+        request_id: Optional[str] = None,
     ) -> None:
         """Log request details for debugging."""
         try:
@@ -464,23 +469,36 @@ class BaseAWSTransport:
                 k: ("***" if k.lower() == "authorization" else v)
                 for k, v in headers.items()
             }
-            self._log.json(f"HTTP {method} - Headers", safe_headers)
+            log_data = {"headers": safe_headers}
+            if request_id:
+                log_data["request_id"] = request_id
+            self._log.json(f"HTTP {method} - Headers", log_data)
             if body:
-                self._log.json(f"HTTP {method} - Payload", body)
+                payload_data = {"payload": body}
+                if request_id:
+                    payload_data["request_id"] = request_id
+                self._log.json(f"HTTP {method} - Payload", payload_data)
         except Exception:
             pass
 
-    def _log_response_details(self, response: httpx.Response) -> None:
+    def _log_response_details(self, response: httpx.Response, request_id: Optional[str] = None) -> None:
         """Log response details for debugging."""
         try:
             if response.status_code == 200:
-                self._log.json(
-                    "HTTP Response - Status", {"status": response.status_code}
-                )
+                log_data = {"status": response.status_code}
+                if request_id:
+                    log_data["request_id"] = request_id
+                self._log.json("HTTP Response - Status", log_data)
             else:
-                self._log.json("HTTP Response", response.json())
+                log_data = response.json()
+                if request_id:
+                    log_data["request_id"] = request_id
+                self._log.json("HTTP Response", log_data)
         except Exception:
-            self._log.info(f"HTTP Response - Status {response.status_code}")
+            log_msg = f"HTTP Response - Status {response.status_code}"
+            if request_id:
+                log_msg += f" (request_id: {request_id})"
+            self._log.info(log_msg)
 
     def cleanup(self) -> None:
         """Clean up resources."""
