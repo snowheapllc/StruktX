@@ -140,7 +140,7 @@ def _wait_for_trace_completion(thread_id: str, timeout: float = 5.0):
     # Just do a quick non-blocking check to see if there are any pending tasks
     if thread_id not in _trace_locks:
         return
-    
+
     with _trace_locks[thread_id]:
         trace_info = _active_traces.get(thread_id)
         if trace_info and trace_info["pending_count"] > 0:

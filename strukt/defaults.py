@@ -420,7 +420,12 @@ class BaseAWSTransport:
 
         # Get signed headers
         request_headers = self._signed_headers(
-            method=method, url=url, user_id=user_id, unit_id=unit_id, body=body_bytes, request_id=request_id
+            method=method,
+            url=url,
+            user_id=user_id,
+            unit_id=unit_id,
+            body=body_bytes,
+            request_id=request_id,
         )
 
         # Merge with additional headers
@@ -481,7 +486,9 @@ class BaseAWSTransport:
         except Exception:
             pass
 
-    def _log_response_details(self, response: httpx.Response, request_id: Optional[str] = None) -> None:
+    def _log_response_details(
+        self, response: httpx.Response, request_id: Optional[str] = None
+    ) -> None:
         """Log response details for debugging."""
         try:
             if response.status_code == 200:

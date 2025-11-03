@@ -339,9 +339,11 @@ class BackgroundTaskMiddleware(Middleware):
             # Handle both sync and async handlers properly in the thread pool
             import asyncio
             import inspect
-            
+
             # Check if handler has an async ahandle method
-            if hasattr(handler, "ahandle") and inspect.iscoroutinefunction(handler.ahandle):
+            if hasattr(handler, "ahandle") and inspect.iscoroutinefunction(
+                handler.ahandle
+            ):
                 # Create a new event loop in this thread for async execution
                 try:
                     # Try to get existing loop (shouldn't exist in thread pool)
@@ -350,7 +352,7 @@ class BackgroundTaskMiddleware(Middleware):
                     # No event loop in this thread, create one
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                
+
                 try:
                     # Run the async handler
                     result = loop.run_until_complete(handler.ahandle(state, parts))
