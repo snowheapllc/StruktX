@@ -247,6 +247,77 @@ class Engine:
         user_context: dict | None = None,
     ):
         """Log handler execution with detailed metrics."""
+        # Extract structured data from handler result (e.g., commands, devices)
+        structured_data = {}
+        
+        # Check if response is a dict/structured data and extract device info
+        response_dict = None
+        if isinstance(result.response, dict):
+            response_dict = result.response
+        elif isinstance(result.response, str):
+            # Try to parse JSON if it's a string
+            try:
+                import json
+                response_dict = json.loads(result.response)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        
+        # Extract commands/devices from response dict if present
+        if response_dict:
+            if "commands" in response_dict and response_dict.get("commands"):
+                structured_data["response_commands"] = response_dict["commands"]
+            if "devices" in response_dict:
+                structured_data["response_devices"] = response_dict["devices"]
+            if "commands_executed" in response_dict:
+                structured_data["commands_executed"] = response_dict["commands_executed"]
+        
+        # Capture commands if present (for device control handlers)
+        if hasattr(result, "commands") and result.commands:
+            try:
+                # Serialize Pydantic models properly
+                if hasattr(result.commands[0], "model_dump"):
+                    commands_data = [cmd.model_dump() for cmd in result.commands]
+                elif hasattr(result.commands[0], "dict"):
+                    commands_data = [cmd.dict() for cmd in result.commands]
+                else:
+                    commands_data = [dict(cmd) if isinstance(cmd, dict) else str(cmd) for cmd in result.commands]
+                structured_data["commands"] = commands_data
+                structured_data["commands_count"] = len(result.commands)
+            except Exception as e:
+                self._logger.debug(f"Failed to serialize commands: {e}")
+                structured_data["commands"] = str(result.commands)
+        
+        # Capture devices if present
+        if hasattr(result, "devices") and result.devices:
+            try:
+                if isinstance(result.devices, list):
+                    devices_data = result.devices
+                elif hasattr(result.devices, "model_dump"):
+                    devices_data = result.devices.model_dump()
+                elif hasattr(result.devices, "dict"):
+                    devices_data = result.devices.dict()
+                else:
+                    devices_data = dict(result.devices) if isinstance(result.devices, dict) else str(result.devices)
+                structured_data["devices"] = devices_data
+                if isinstance(devices_data, list):
+                    structured_data["devices_count"] = len(devices_data)
+            except Exception as e:
+                self._logger.debug(f"Failed to serialize devices: {e}")
+                structured_data["devices"] = str(result.devices)
+        
+        # Capture any other data attribute
+        if hasattr(result, "data") and result.data:
+            try:
+                if hasattr(result.data, "model_dump"):
+                    structured_data["data"] = result.data.model_dump()
+                elif hasattr(result.data, "dict"):
+                    structured_data["data"] = result.data.dict()
+                else:
+                    structured_data["data"] = result.data
+            except Exception as e:
+                self._logger.debug(f"Failed to serialize data: {e}")
+                structured_data["data"] = str(result.data)
+        
         self._log_operation(
             "handler_execution",
             user_context=user_context,
@@ -259,6 +330,7 @@ class Engine:
             output_status=result.status,
             duration_ms=duration * 1000,
             success=result.status != "error",
+            **structured_data,  # Include structured data in trace attributes
         )
 
     def _log_memory_operation(self, operation: str, **kwargs):

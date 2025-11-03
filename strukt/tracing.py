@@ -125,27 +125,28 @@ def _wait_for_trace_completion(thread_id: str, timeout: float = 5.0):
     This is called within the weave.thread() context to ensure background tasks
     are captured in the trace.
 
+    NOTE: This function no longer blocks for background tasks - background tasks
+    should return immediately and complete asynchronously. This is kept for
+    backward compatibility but only does a quick check without blocking.
+
     Args:
         thread_id: The trace session ID
-        timeout: Maximum time to wait in seconds
+        timeout: Maximum time to wait in seconds (ignored for background tasks)
     """
     if thread_id not in _active_traces:
         return
 
-    start_wait = time.time()
-
-    # Wait for all background tasks to complete
-    while time.time() - start_wait < timeout:
-        if thread_id not in _trace_locks:
-            break
-
-        with _trace_locks[thread_id]:
-            trace_info = _active_traces.get(thread_id)
-            if not trace_info or trace_info["pending_count"] == 0:
-                break
-
-        # Check periodically
-        time.sleep(0.05)
+    # Don't wait for background tasks - they should complete asynchronously
+    # Just do a quick non-blocking check to see if there are any pending tasks
+    if thread_id not in _trace_locks:
+        return
+    
+    with _trace_locks[thread_id]:
+        trace_info = _active_traces.get(thread_id)
+        if trace_info and trace_info["pending_count"] > 0:
+            # Background tasks are running - don't block, just return
+            # They will complete in the background and update the trace asynchronously
+            pass
 
 
 def register_background_task(thread_id: str, task_id: str):
